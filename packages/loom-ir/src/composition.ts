@@ -1,6 +1,12 @@
-import type { ComponentNode } from "./nodes.js";
+import { typecheck, typeEquals, typeToString, type Expr, type LoomType, type TypecheckContext } from "loom-expr";
+import type { ComponentNode, EventNode, FieldNode, OnWireTarget, PropNode, PropValue } from "./nodes.js";
 
 export class CompositionCheckError extends Error {}
+
+/** `LoomValue` includes an index-signature record type, so a plain `"expr" in v` check alone isn't enough for TS to narrow `v.expr` cleanly to `Expr` — an explicit type predicate is. */
+function isComputedProp(v: PropValue): v is { expr: Expr } {
+  return v !== null && typeof v === "object" && !Array.isArray(v) && "expr" in v;
+}
 
 /**
  * Compile-time composition check (mirrors checkPath in paths.ts): a
@@ -8,29 +14,45 @@ export class CompositionCheckError extends Error {}
  * `root: true` node, with every other node claimed by exactly one ancestor's
  * `slotContent.*.uses`, and every `props`/`slotContent`/`on` key valid
  * against the *referenced* component's own declared props/slots/events.
- * `on` values and `visibleWhen` are checked against *this* component's own
- * declarations. All of this is checkable purely from data already in memory
- * by parse time (`resolvedComponent` is eagerly resolved), so it's a hard
- * parse error, not a soft validate-time warning — an invalid composition
- * tree must never become a `ComponentNode`.
+ * `on` values, `visibleWhen`, and `slotContent.*.fields` are checked against
+ * *this* component's own declarations. All of this is checkable purely from
+ * data already in memory by parse time (`resolvedComponent` is eagerly
+ * resolved), so it's a hard parse error, not a soft validate-time warning —
+ * an invalid composition tree must never become a `ComponentNode`.
  *
- * `EventNode.firesWhen` is unrelated to composition but is checked here too
- * (over `component.declarations` directly) since it's the same class of
- * "structural reference must resolve" check, and runs unconditionally
- * (unlike the composition-tree checks) since a component can declare
- * `firesWhen` without having any Composition section at all.
+ * `EventNode.firesWhen` and `FieldNode.validate` are unrelated to
+ * composition but are checked here too (over `component.declarations`
+ * directly) since they're the same class of "structural reference must
+ * resolve"/"must typecheck" check, and run unconditionally (unlike the
+ * composition-tree checks) since a component can declare either without
+ * having any Composition section at all.
  */
 export function checkComposition(component: ComponentNode): void {
   const ownProps = component.declarations.filter((d) => d.kind === "prop");
   const ownPropNames = new Set(ownProps.map((p) => p.name));
   const ownBoolPropNames = new Set(ownProps.filter((p) => p.valueType.kind === "bool").map((p) => p.name));
   const ownEventNames = new Set(component.declarations.filter((d) => d.kind === "event").map((d) => d.name));
+  const ownFields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
+  const ownFieldNames = new Set(ownFields.map((f) => f.name));
 
   for (const decl of component.declarations) {
     if (decl.kind === "event" && decl.firesWhen) {
       if (!ownPropNames.has(decl.firesWhen.prop)) {
         throw new CompositionCheckError(
           `event '${decl.id}' has firesWhen.prop '${decl.firesWhen.prop}' which is not a declared prop`
+        );
+      }
+    }
+    if (decl.kind === "field" && decl.validate) {
+      let resultType: LoomType;
+      try {
+        resultType = typecheck(decl.validate, { props: { [decl.name]: { kind: "string" } } });
+      } catch (e) {
+        throw new CompositionCheckError(`field '${decl.id}' has an invalid validate expression: ${(e as Error).message}`);
+      }
+      if (resultType.kind !== "bool") {
+        throw new CompositionCheckError(
+          `field '${decl.id}' validate must evaluate to bool, got '${typeToString(resultType)}'`
         );
       }
     }
@@ -98,6 +120,15 @@ export function checkComposition(component: ComponentNode): void {
     throw new CompositionCheckError(`component '${component.id}' has composition nodes unreachable from its root`);
   }
 
+  // Env a `{ expr }` prop value's Expr is typechecked against: this component's own props, plus
+  // each declared field's own current value (string) and derived `<name>Valid` boolean.
+  const exprPropCtx: TypecheckContext = {
+    props: {
+      ...Object.fromEntries(ownProps.map((p) => [p.name, p.valueType])),
+      ...Object.fromEntries(ownFields.flatMap((f) => [[f.name, { kind: "string" } as LoomType], [`${f.name}Valid`, { kind: "bool" } as LoomType]])),
+    },
+  };
+
   // Cross-reference each node's props/slotContent/on keys against the referenced component's real declarations.
   for (const node of nodes) {
     const referenced = node.resolvedComponent;
@@ -105,24 +136,79 @@ export function checkComposition(component: ComponentNode): void {
     const declaredSlots = new Set(referenced.declarations.filter((d) => d.kind === "slot").map((d) => d.name));
     const declaredEvents = new Set(referenced.declarations.filter((d) => d.kind === "event").map((d) => d.name));
 
-    for (const propName of Object.keys(node.props ?? {})) {
+    for (const [propName, propValue] of Object.entries(node.props ?? {})) {
       if (!declaredProps.has(propName)) {
         throw new CompositionCheckError(`composition node '${node.id}' sets prop '${propName}' which '${node.component}' does not declare`);
       }
+      if (isComputedProp(propValue)) {
+        const declaredType = referenced.declarations.find(
+          (d): d is PropNode => d.kind === "prop" && d.name === propName
+        )!.valueType;
+        let exprType: LoomType;
+        try {
+          exprType = typecheck(propValue.expr, exprPropCtx);
+        } catch (e) {
+          throw new CompositionCheckError(
+            `composition node '${node.id}' prop '${propName}' has an invalid computed expression: ${(e as Error).message}`
+          );
+        }
+        if (!typeEquals(exprType, declaredType)) {
+          throw new CompositionCheckError(
+            `composition node '${node.id}' prop '${propName}' computed expression has type '${typeToString(exprType)}', expected '${typeToString(declaredType)}'`
+          );
+        }
+      }
     }
-    for (const slotName of Object.keys(node.slotContent ?? {})) {
+    for (const [slotName, content] of Object.entries(node.slotContent ?? {})) {
       if (!declaredSlots.has(slotName)) {
         throw new CompositionCheckError(`composition node '${node.id}' fills slot '${slotName}' which '${node.component}' does not declare`);
       }
+      if ("fields" in content) {
+        for (const fieldName of content.fields) {
+          if (!ownFieldNames.has(fieldName)) {
+            throw new CompositionCheckError(
+              `composition node '${node.id}' slot '${slotName}' references unknown field '${fieldName}' — not a declared field on '${component.id}'`
+            );
+          }
+        }
+      }
     }
-    for (const [childEventName, ownEventName] of Object.entries(node.on ?? {})) {
+    for (const [childEventName, wireRaw] of Object.entries(node.on ?? {})) {
       if (!declaredEvents.has(childEventName)) {
         throw new CompositionCheckError(`composition node '${node.id}' wires event '${childEventName}' which '${node.component}' does not declare`);
       }
-      if (!ownEventNames.has(ownEventName)) {
-        throw new CompositionCheckError(
-          `composition node '${node.id}' wires '${childEventName}' to '${ownEventName}', which '${component.id}' does not declare`
-        );
+      const wires = Array.isArray(wireRaw) ? wireRaw : [wireRaw];
+      for (const wireEntry of wires) {
+        const target: OnWireTarget = typeof wireEntry === "string" ? { event: wireEntry } : wireEntry;
+        if (!ownEventNames.has(target.event)) {
+          throw new CompositionCheckError(
+            `composition node '${node.id}' wires '${childEventName}' to '${target.event}', which '${component.id}' does not declare`
+          );
+        }
+        const ownEvent = component.declarations.find((d): d is EventNode => d.kind === "event" && d.name === target.event)!;
+        const payloadFields = ownEvent.payloadType.kind === "record" ? ownEvent.payloadType.fields : {};
+        const payload = target.payload ?? {};
+        for (const key of Object.keys(payload)) {
+          if (!(key in payloadFields)) {
+            throw new CompositionCheckError(
+              `composition node '${node.id}' wires '${childEventName}' to '${target.event}' with payload key '${key}' not in '${target.event}''s declared payloadType`
+            );
+          }
+        }
+        for (const key of Object.keys(payloadFields)) {
+          if (!(key in payload)) {
+            throw new CompositionCheckError(
+              `composition node '${node.id}' wires '${childEventName}' to '${target.event}' but its payload is missing required field '${key}'`
+            );
+          }
+        }
+        for (const source of Object.values(payload)) {
+          if (!ownFieldNames.has(source) && !ownPropNames.has(source)) {
+            throw new CompositionCheckError(
+              `composition node '${node.id}' wires '${childEventName}' payload source '${source}' is neither a declared field nor a declared prop on '${component.id}'`
+            );
+          }
+        }
       }
     }
     if (node.visibleWhen !== undefined) {
@@ -137,4 +223,3 @@ export function checkComposition(component: ComponentNode): void {
     }
   }
 }
-

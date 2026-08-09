@@ -1,6 +1,14 @@
-import type { ComponentNode, EmittedFile, UsesNode } from "loom-ir";
+import type { ComponentNode, EmittedFile, FieldNode, OnWireTarget, UsesNode } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import { loomTypeToTs } from "./loomTypeToTs.js";
+
+function isComputedPropValue(v: unknown): v is { expr: unknown } {
+  return v !== null && typeof v === "object" && !Array.isArray(v) && "expr" in v;
+}
+
+function hasComputedProps(nodes: readonly UsesNode[]): boolean {
+  return nodes.some((n) => Object.values(n.props ?? {}).some(isComputedPropValue));
+}
 
 function capitalize(s: string): string {
   return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
@@ -65,20 +73,47 @@ function collectReferencedComponents(nodes: readonly UsesNode[]): ComponentNode[
 }
 
 /**
- * Recursively renders one `UsesNode` (and, through `slotContent.*.uses`, its
- * nested children) as a JSX element. A resolved child's own props interface
- * already types each non-default slot as `React.ReactNode`, so slot content
- * becomes a JSX attribute (`actions={...}`), never raw children — React has
- * no per-slot child-targeting mechanism. `on` wiring adds an extra callback
- * prop reusing the same `on${Capitalize(name)}` naming convention the props
- * interface generator uses elsewhere in this file.
+ * A native `<input>` bound to this field's own local state — `value`/
+ * `touched` are recomputed/set together on every keystroke, `<name>Valid`
+ * is recomputed inline from `evaluate()` each render, and the invalid
+ * message (if any) only shows once the field has been touched.
  */
-function renderUsesJsx(node: UsesNode, byName: ReadonlyMap<string, UsesNode>): string {
+function renderFieldJsx(field: FieldNode): string {
+  const camel = camelCase(field.name);
+  const Camel = capitalize(camel);
+  const inputType = field.secret ? "password" : "text";
+  const parts = [
+    `<input type=${JSON.stringify(inputType)} name=${JSON.stringify(field.name)} value={${camel}Value} onChange={handle${Camel}Change} aria-invalid={${camel}Touched && !${camel}Valid} />`,
+  ];
+  if (field.invalidMessage) {
+    parts.push(
+      `{${camel}Touched && !${camel}Valid && <span data-loom-field-error=${JSON.stringify(field.name)}>{${JSON.stringify(field.invalidMessage)}}</span>}`
+    );
+  }
+  return `<React.Fragment>${parts.join("")}</React.Fragment>`;
+}
+
+/**
+ * Recursively renders one `UsesNode` (and, through `slotContent.*.uses`/
+ * `slotContent.*.fields`, its nested children/native fields) as a JSX
+ * element. A resolved child's own props interface already types each
+ * non-default slot as `React.ReactNode`, so slot content becomes a JSX
+ * attribute (`actions={...}`), never raw children — React has no per-slot
+ * child-targeting mechanism. A `{ expr }` prop value is evaluated live
+ * against `__env` (the enclosing component's own props + field state).
+ * `on` wiring adds one or more extra callback invocations reusing the same
+ * `on${Capitalize(name)}` naming convention the props interface generator
+ * uses elsewhere in this file, with each wire's `payload` sourced from a
+ * sibling field's current value or the enclosing component's own prop.
+ */
+function renderUsesJsx(node: UsesNode, byName: ReadonlyMap<string, UsesNode>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
   const ref = node.resolvedComponent;
   const refName = pascalCase(ref.name);
   const refSlots = ref.declarations.filter((d) => d.kind === "slot");
 
-  const propAttrs = Object.entries(node.props ?? {}).map(([k, v]) => `${k}={${JSON.stringify(v)}}`);
+  const propAttrs = Object.entries(node.props ?? {}).map(([k, v]) =>
+    isComputedPropValue(v) ? `${k}={evaluate(${JSON.stringify(v.expr)}, __env) === true}` : `${k}={${JSON.stringify(v)}}`
+  );
 
   const namedSlotAttrs: string[] = [];
   let defaultChildrenExpr: string | undefined;
@@ -88,7 +123,9 @@ function renderUsesJsx(node: UsesNode, byName: ReadonlyMap<string, UsesNode>): s
     const rendered =
       "text" in content
         ? JSON.stringify(content.text)
-        : `<>${content.uses.map((n) => renderUsesJsx(byName.get(n)!, byName)).join("")}</>`;
+        : "uses" in content
+          ? `<>${content.uses.map((n) => renderUsesJsx(byName.get(n)!, byName, fieldsByName)).join("")}</>`
+          : `<>${content.fields.map((n) => renderFieldJsx(fieldsByName.get(n)!)).join("")}</>`;
     if (slot.name === "default") {
       defaultChildrenExpr = rendered;
     } else {
@@ -96,9 +133,17 @@ function renderUsesJsx(node: UsesNode, byName: ReadonlyMap<string, UsesNode>): s
     }
   }
 
-  const onAttrs = Object.entries(node.on ?? {}).map(
-    ([childEventName, ownEventName]) => `on${capitalize(childEventName)}={() => on${capitalize(ownEventName)}?.({})}`
-  );
+  const onAttrs = Object.entries(node.on ?? {}).map(([childEventName, wireRaw]) => {
+    const wires = Array.isArray(wireRaw) ? wireRaw : [wireRaw];
+    const calls = wires.map((w) => {
+      const target: OnWireTarget = typeof w === "string" ? { event: w } : w;
+      const payloadEntries = Object.entries(target.payload ?? {}).map(
+        ([k, source]) => `${k}: ${fieldsByName.has(source) ? `${camelCase(source)}Value` : source}`
+      );
+      return `on${capitalize(target.event)}?.({ ${payloadEntries.join(", ")} });`;
+    });
+    return `on${capitalize(childEventName)}={() => { ${calls.join(" ")} }}`;
+  });
 
   const attrs = [...propAttrs, ...namedSlotAttrs, ...onAttrs];
   const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
@@ -150,6 +195,9 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   const styledParts = new Set(component.style.filter((n) => n.kind !== "visual-conformance").map((n) => n.part));
   const rootUses = component.composition.find((n) => n.root);
   const referencedComponents = collectReferencedComponents(component.composition);
+  const fields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
+  const fieldsByName = new Map(fields.map((f) => [f.name, f] as const));
+  const needsEvaluate = fields.length > 0 || hasComputedProps(component.composition);
 
   const lines: string[] = [
     `// GENERATED by loom-emit-react. Do not edit by hand.`,
@@ -158,6 +206,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
       : undefined,
     `import * as React from "react";`,
     component.transitions.length > 0 ? `import { LoomMachine, Transition, Guard } from "loom-expr";` : undefined,
+    needsEvaluate ? `import { evaluate } from "loom-expr";` : undefined,
     styledParts.size > 0 ? `import "./${componentName}.css";` : undefined,
     ...referencedComponents.map((c) => `import { ${pascalCase(c.name)} } from "./${pascalCase(c.name)}";`),
     ``,
@@ -188,6 +237,31 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   if (destructured.length > 0 || slots.length > 0 || eventCallbackNames.length > 0) {
     const parts = [...destructured, ...slots.map((s) => slotPropName(s.name)), ...eventCallbackNames];
     lines.push(`  const { ${parts.join(", ")} } = props;`);
+  }
+
+  for (const field of fields) {
+    const camel = camelCase(field.name);
+    const Camel = capitalize(camel);
+    lines.push(`  const [${camel}Value, set${Camel}Value] = React.useState<string>(${JSON.stringify(field.initialValue ?? "")});`);
+    lines.push(`  const [${camel}Touched, set${Camel}Touched] = React.useState<boolean>(false);`);
+    const validExpr = field.validate
+      ? `evaluate(${JSON.stringify(field.validate)}, { ${field.name}: ${camel}Value }) === true`
+      : `true`;
+    lines.push(`  const ${camel}Valid = ${validExpr};`);
+    lines.push(`  const handle${Camel}Change = (e: React.ChangeEvent<HTMLInputElement>) => {`);
+    lines.push(`    set${Camel}Value(e.target.value);`);
+    lines.push(`    set${Camel}Touched(true);`);
+    lines.push(`  };`);
+  }
+  if (fields.length > 0) lines.push(``);
+
+  if (hasComputedProps(component.composition)) {
+    const envParts = [
+      ...props.map((p) => p.name),
+      ...fields.flatMap((f) => [`${f.name}: ${camelCase(f.name)}Value`, `${f.name}Valid: ${camelCase(f.name)}Valid`]),
+    ];
+    lines.push(`  const __env: any = { ${envParts.join(", ")} };`);
+    lines.push(``);
   }
 
   for (const event of events) {
@@ -227,7 +301,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   lines.push(`    >`);
   if (rootUses) {
     const byName = new Map(component.composition.map((n) => [n.name, n] as const));
-    const composedJsx = renderUsesJsx(rootUses, byName);
+    const composedJsx = renderUsesJsx(rootUses, byName, fieldsByName);
     if (rootUses.visibleWhen) {
       lines.push(`      {${rootUses.visibleWhen} && (`);
       lines.push(`        ${composedJsx}`);

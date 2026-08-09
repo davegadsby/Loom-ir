@@ -376,6 +376,165 @@ Irrelevant.
   });
 });
 
+describe("parseSpec — field declarations and computed composition", () => {
+  it("parses a field block with all optional properties", () => {
+    const spec = `---
+name: username-field
+kind: primitive
+---
+
+## Declarations
+
+### username
+
+\`\`\`yaml
+kind: field
+secret: false
+initialValue: ""
+validate: 'matches(username, "^[^@]+@[^@]+$")'
+invalidMessage: "Enter a valid email address."
+\`\`\`
+`;
+    const component = parseSpec(spec);
+    const field = component.declarations.find((d) => d.kind === "field");
+    expect(field).toMatchObject({
+      kind: "field",
+      name: "username",
+      secret: false,
+      initialValue: "",
+      invalidMessage: "Enter a valid email address.",
+    });
+    expect(field!.id).toBe("username-field/declarations/username");
+    if (field!.kind === "field") {
+      expect(field!.validate).toMatchObject({ type: "builtin", name: "matches" });
+    }
+  });
+
+  it("parses a composite spec with {fields} slotContent, an {expr} computed prop, and a multi-target 'on' wire with payload", () => {
+    const buttonSpec = `---
+name: button
+kind: primitive
+---
+
+## Declarations
+
+### disabled
+
+\`\`\`yaml
+kind: prop
+type: bool
+default: false
+\`\`\`
+
+### press
+
+\`\`\`yaml
+kind: event
+payloadType: "record{}"
+\`\`\`
+`;
+    const dialogSpec = `---
+name: dialog
+kind: primitive
+---
+
+## Declarations
+
+### body
+
+\`\`\`yaml
+kind: slot
+\`\`\`
+
+### actions
+
+\`\`\`yaml
+kind: slot
+\`\`\`
+`;
+    const loginDialogSpec = `---
+name: login-dialog
+kind: composite
+---
+
+## Declarations
+
+### username
+
+\`\`\`yaml
+kind: field
+validate: 'matches(username, "^[^@]+@[^@]+$")'
+\`\`\`
+
+### login
+
+\`\`\`yaml
+kind: event
+payloadType: "record{username: string}"
+\`\`\`
+
+### closed
+
+\`\`\`yaml
+kind: event
+payloadType: "record{}"
+\`\`\`
+
+## Composition
+
+### dialog-instance
+
+\`\`\`yaml
+kind: uses
+component: dialog
+root: true
+slotContent:
+  body:
+    fields: [username]
+  actions:
+    uses: [login-button]
+\`\`\`
+
+### login-button
+
+\`\`\`yaml
+kind: uses
+component: button
+props:
+  disabled:
+    expr: "not usernameValid"
+on:
+  press:
+    - event: login
+      payload: { username: username }
+    - event: closed
+\`\`\`
+`;
+
+    const button = parseSpec(buttonSpec);
+    const dialog = parseSpec(dialogSpec);
+    const loginDialog = parseSpec(loginDialogSpec, {
+      resolveComponent: (ref) => {
+        if (ref === "button") return button;
+        if (ref === "dialog") return dialog;
+        throw new Error(`unknown component '${ref}'`);
+      },
+    });
+
+    const dialogInstance = loginDialog.composition.find((n) => n.name === "dialog-instance")!;
+    expect(dialogInstance.slotContent).toEqual({
+      body: { fields: ["username"] },
+      actions: { uses: ["login-button"] },
+    });
+
+    const loginButton = loginDialog.composition.find((n) => n.name === "login-button")!;
+    expect(loginButton.props).toMatchObject({ disabled: { expr: { type: "unop", op: "not" } } });
+    expect(loginButton.on).toEqual({
+      press: [{ event: "login", payload: { username: "username" } }, { event: "closed" }],
+    });
+  });
+});
+
 describe("parseSpec — error handling", () => {
   it("throws when extends is present but no resolveBase is supplied", () => {
     expect(() => parseSpec(readExample("checkbox.md"))).toThrow(/resolveBase/);
