@@ -8,6 +8,7 @@
     { "$ref": "#/$defs/event" },
     { "$ref": "#/$defs/slot" },
     { "$ref": "#/$defs/method" },
+    { "$ref": "#/$defs/field" },
     { "$ref": "#/$defs/state" },
     { "$ref": "#/$defs/transition" },
     { "$ref": "#/$defs/guard" },
@@ -86,6 +87,18 @@
           }
         },
         "returnType": { "type": "string" }
+      }
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "field" },
+        "secret": { "type": "boolean", "description": "Renders as a native password input (type=\"password\") instead of text." },
+        "initialValue": { "type": "string", "description": "Defaults to \"\" if omitted." },
+        "validate": { "type": "string", "description": "Expression-language text (§6.4), evaluated against `{ [name]: currentValue }`. Omitted means always valid." },
+        "invalidMessage": { "type": "string", "description": "Shown once the field has been touched and validate() is currently false." }
       }
     },
     "state": {
@@ -246,13 +259,19 @@
         "props": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Literal prop values passed to the child instance. Checked against the referenced component's declared props at parse time, not by this schema."
+          "description": "Literal prop values, or `{ expr: <expression text> }` for a value live-computed at render time from this component's own fields/props. Checked against the referenced component's declared props at parse time, not by this schema."
         },
         "slotContent": { "$ref": "#/$defs/usesSlotContent" },
         "on": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
-          "description": "Maps this embedded child instance's declared event name to one of this component's own declared event names."
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string", "description": "Sugar for { event: <string> } — fires the named own-event with an empty payload." },
+              { "$ref": "#/$defs/onWireTarget" },
+              { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/onWireTarget" }] }, "minItems": 1 }
+            ]
+          },
+          "description": "Maps this embedded child instance's declared event name to one or more of this component's own declared events to fire."
         },
         "visibleWhen": {
           "type": "string",
@@ -283,8 +302,34 @@
                 "description": "Ordered list of other `uses` node names (siblings in this same component's Composition section) to nest into this slot."
               }
             }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fields"],
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1,
+                "description": "Ordered list of this component's own declared FieldNode names, rendered inline as native <input> elements in this slot position."
+              }
+            }
           }
         ]
+      }
+    },
+    "onWireTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event"],
+      "properties": {
+        "event": { "type": "string" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Maps a field of the fired event's declared payloadType record to a source name — a sibling FieldNode name or a declared prop name, both on this component."
+        }
       }
     }
   }

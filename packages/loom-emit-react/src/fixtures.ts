@@ -1,4 +1,5 @@
-import type { ComponentNode, UsesNode } from "loom-ir";
+import type { ComponentNode, FieldNode, UsesNode } from "loom-ir";
+import { parseExpr } from "loom-expr";
 
 /** Exercises props, an event, a slot, an unsupported method, and a guarded machine. */
 export function makeFixture(): ComponentNode {
@@ -237,5 +238,110 @@ export function makeCompositionFixture(): ComponentNode {
       },
     ],
     composition: [dialogUses, confirmButton],
+  });
+}
+
+/**
+ * A `login-widget` composing a `dialog` (root, `body` slot rendered as a
+ * native `username` `FieldNode`) with a leaf `login-button` whose `disabled`
+ * prop is a `{expr}` computed live from the field's derived validity, wired
+ * to fire two of `login-widget`'s own events (with a constructed payload) on
+ * one click — small enough to assert exact output against, but exercising
+ * native field rendering, computed props, and multi-target `on` together.
+ */
+export function makeLoginFixture(): ComponentNode {
+  const dialog = makeChildComponent("dialog", {
+    declarations: [
+      { id: "dialog/declarations/body", kind: "slot", origin: "own", assertable: false, name: "body" },
+      { id: "dialog/declarations/actions", kind: "slot", origin: "own", assertable: false, name: "actions" },
+    ],
+  });
+  const button = makeChildComponent("button", {
+    declarations: [
+      {
+        id: "button/declarations/disabled",
+        kind: "prop",
+        origin: "own",
+        assertable: false,
+        name: "disabled",
+        valueType: { kind: "bool" },
+        defaultValue: false,
+      },
+      { id: "button/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+      {
+        id: "button/declarations/press",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "press",
+        payloadType: { kind: "record", fields: {} },
+      },
+    ],
+  });
+
+  const username: FieldNode = {
+    id: "login-widget/declarations/username",
+    kind: "field",
+    origin: "own",
+    assertable: false,
+    name: "username",
+    validate: parseExpr('matches(username, "^[^@]+@[^@]+$")'),
+    invalidMessage: "Enter a valid email address.",
+  };
+
+  const loginButton: UsesNode = {
+    id: "login-widget/composition/login-button",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "login-button",
+    component: "button",
+    resolvedComponent: button,
+    props: { disabled: { expr: parseExpr("not usernameValid") } },
+    slotContent: { default: { text: "Login" } },
+    on: {
+      press: [
+        { event: "login", payload: { username: "username" } },
+        { event: "closed" },
+      ],
+    },
+  };
+
+  const dialogUses: UsesNode = {
+    id: "login-widget/composition/dialog-instance",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "dialog-instance",
+    component: "dialog",
+    resolvedComponent: dialog,
+    root: true,
+    slotContent: {
+      body: { fields: ["username"] },
+      actions: { uses: ["login-button"] },
+    },
+  };
+
+  return makeChildComponent("login-widget", {
+    declarations: [
+      username,
+      {
+        id: "login-widget/declarations/login",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "login",
+        payloadType: { kind: "record", fields: { username: { kind: "string" } } },
+      },
+      {
+        id: "login-widget/declarations/closed",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "closed",
+        payloadType: { kind: "record", fields: {} },
+      },
+    ],
+    composition: [dialogUses, loginButton],
   });
 }

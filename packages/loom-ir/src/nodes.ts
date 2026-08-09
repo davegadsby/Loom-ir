@@ -42,7 +42,30 @@ export interface MethodNode extends LoomNodeEnvelope {
   returnType: LoomType;
 }
 
-export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode;
+/**
+ * A native, locally-managed text input — unlike `PropNode`, its current
+ * value is never parent-controlled; the component that declares it renders
+ * a real `<input>` bound to its own local state. `validate` is evaluated
+ * against an env containing only this field's own current value bound
+ * under its own `name`; the derived `<name>Valid` boolean it produces is
+ * available to that same component's `UsesNode.props` `{ expr }` values
+ * (§ Composition) — the mechanism that lets e.g. a composed Login button's
+ * `disabled` prop be computed from two sibling fields' live validity.
+ */
+export interface FieldNode extends LoomNodeEnvelope {
+  kind: "field";
+  name: string;
+  /** Renders type="password" instead of type="text". */
+  secret?: boolean;
+  /** Defaults to "" if omitted. */
+  initialValue?: string;
+  /** Evaluated against `{ [name]: currentValue }`. Omitted means always valid. */
+  validate?: Expr;
+  /** Shown once the field has been touched (the user has typed into it) and validate() is currently false. */
+  invalidMessage?: string;
+}
+
+export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode | FieldNode;
 
 // ---------------------------------------------------------------------------
 // Machine
@@ -189,6 +212,22 @@ export type StyleNode = TokenRefNode | LayoutIntentNode | VisualConformanceNode;
  * `slotContent[*].uses`, not by nesting — the same "structural reference by
  * slug" idiom `TransitionNode.from`/`.to` already uses for states.
  */
+/** A literal value, or a live-computed value sourced from this component's own current field/prop state at render time. */
+export type PropValue = LoomValue | { expr: Expr };
+
+/**
+ * One fired-event target for an `on` wire: `event` is one of *this*
+ * component's own declared event names; `payload` maps that event's
+ * declared `payloadType` record fields to a source name — a sibling
+ * `FieldNode` name or one of this component's own prop names.
+ */
+export interface OnWireTarget {
+  event: string;
+  payload?: Record<string, string>;
+}
+/** A bare string is sugar for `{ event: string }` — an empty-payload forward, the only shape `on` originally had. */
+export type OnWire = string | OnWireTarget;
+
 export interface UsesNode extends LoomNodeEnvelope {
   kind: "uses";
   /** This instance's own local name — referenced by other UsesNodes' slotContent.*.uses. */
@@ -199,12 +238,12 @@ export interface UsesNode extends LoomNodeEnvelope {
   resolvedComponent: ComponentNode;
   /** Exactly one UsesNode per component must set this — the outermost embedded instance. */
   root?: boolean;
-  /** Literal prop values passed to the child instance. */
-  props?: Record<string, LoomValue>;
-  /** Per-slot-name literal text or an ordered list of other UsesNode `name`s to nest into that slot. */
-  slotContent?: Record<string, { text: string } | { uses: string[] }>;
-  /** Maps this embedded child instance's declared event name to one of *this* component's own declared event names. */
-  on?: Record<string, string>;
+  /** Literal or live-computed prop values passed to the child instance. */
+  props?: Record<string, PropValue>;
+  /** Per-slot-name literal text, an ordered list of other UsesNode `name`s, or a list of this component's own declared FieldNode names to render natively in that slot. */
+  slotContent?: Record<string, { text: string } | { uses: string[] } | { fields: string[] }>;
+  /** Maps this embedded child instance's declared event name to one or more of this component's own declared events to fire. */
+  on?: Record<string, OnWire | OnWire[]>;
   /** Root node only: name of a bool prop on this component gating whether the composed subtree renders at all. */
   visibleWhen?: string;
 }

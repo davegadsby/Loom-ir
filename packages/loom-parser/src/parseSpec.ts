@@ -12,6 +12,7 @@ import {
   type DeclarationNode,
   type EventNode,
   type GuardNode,
+  type PropValue,
   type ProseNode,
   type RuleNode,
   type StateNode,
@@ -186,6 +187,16 @@ function buildDeclarationNode(componentSlug: string, block: RawNodeBlock): Decla
       };
     case "slot":
       return { ...envelope, kind: "slot", name: block.slug };
+    case "field":
+      return {
+        ...envelope,
+        kind: "field",
+        name: block.slug,
+        secret: yaml.secret as boolean | undefined,
+        initialValue: yaml.initialValue as string | undefined,
+        validate: yaml.validate ? parseExpr(yaml.validate as string) : undefined,
+        invalidMessage: yaml.invalidMessage as string | undefined,
+      };
     case "method": {
       const rawParams = (yaml.params as Array<{ name: string; type: string }> | undefined) ?? [];
       return {
@@ -351,6 +362,20 @@ function buildStyleNode(componentSlug: string, block: RawNodeBlock): StyleNode {
   }
 }
 
+/** A raw YAML prop value is either a literal, or `{ expr: <expression text> }` — the latter's text needs `parseExpr`, same as any other expression-language field. */
+function parsePropsYaml(raw: Record<string, unknown> | undefined): UsesNode["props"] {
+  if (!raw) return undefined;
+  const result: NonNullable<UsesNode["props"]> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value) && "expr" in value) {
+      result[key] = { expr: parseExpr((value as { expr: string }).expr) };
+    } else {
+      result[key] = value as PropValue;
+    }
+  }
+  return result;
+}
+
 function buildCompositionNode(componentSlug: string, block: RawNodeBlock, options: ParseSpecOptions): UsesNode {
   const yaml = requireYaml(block);
   if (yaml.kind !== "uses") {
@@ -369,9 +394,9 @@ function buildCompositionNode(componentSlug: string, block: RawNodeBlock, option
     component: ref,
     resolvedComponent: options.resolveComponent(ref),
     root: yaml.root as boolean | undefined,
-    props: yaml.props as UsesNode["props"],
+    props: parsePropsYaml(yaml.props as Record<string, unknown> | undefined),
     slotContent: yaml.slotContent as UsesNode["slotContent"],
-    on: yaml.on as Record<string, string> | undefined,
+    on: yaml.on as UsesNode["on"],
     visibleWhen: yaml.visibleWhen as string | undefined,
   };
 }

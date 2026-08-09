@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkComposition, CompositionCheckError } from "./composition.js";
-import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode } from "./nodes.js";
+import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode } from "./nodes.js";
 
 function makeChildComponent(overrides: Partial<ComponentNode> = {}): ComponentNode {
   return {
@@ -223,6 +223,168 @@ describe("checkComposition", () => {
         { id: "widget/declarations/open", kind: "prop", origin: "own", assertable: false, name: "open", valueType: { kind: "bool" } },
         { id: "widget/declarations/opened", kind: "event", origin: "own", assertable: false, name: "opened", payloadType: { kind: "record", fields: {} }, firesWhen: { prop: "open", becomes: true } },
       ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  const username: FieldNode = {
+    id: "widget/declarations/username",
+    kind: "field",
+    origin: "own",
+    assertable: false,
+    name: "username",
+  };
+
+  it("accepts a field with no validate expression", () => {
+    const widget = makeWidget({ declarations: [username] });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("accepts a field whose validate expression evaluates to bool", () => {
+    const withValidate: FieldNode = { ...username, validate: { type: "literal", valueType: { kind: "bool" }, value: true } };
+    const widget = makeWidget({ declarations: [withValidate] });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when a field's validate expression doesn't evaluate to bool", () => {
+    const withValidate: FieldNode = { ...username, validate: { type: "literal", valueType: { kind: "string" }, value: "x" } };
+    const widget = makeWidget({ declarations: [withValidate] });
+    expect(() => checkComposition(widget)).toThrow(/validate must evaluate to bool/);
+  });
+
+  it("throws when a field's validate expression is malformed", () => {
+    const withValidate: FieldNode = {
+      ...username,
+      validate: { type: "member", target: { type: "ref", name: "missing" }, property: "x" },
+    };
+    const widget = makeWidget({ declarations: [withValidate] });
+    expect(() => checkComposition(widget)).toThrow(/has an invalid validate expression/);
+  });
+
+  it("throws when slotContent.fields references a field this component doesn't declare", () => {
+    const widget = makeWidget({
+      declarations: [username],
+      composition: [makeUses({ root: true, slotContent: { default: { fields: ["missing"] } } })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/references unknown field 'missing'/);
+  });
+
+  it("accepts slotContent.fields referencing a declared field", () => {
+    const widget = makeWidget({
+      declarations: [username],
+      composition: [makeUses({ root: true, slotContent: { default: { fields: ["username"] } } })],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  const childBool = makeChildComponent({
+    id: "toggle",
+    name: "toggle",
+    declarations: [
+      { id: "toggle/declarations/disabled", kind: "prop", origin: "own", assertable: false, name: "disabled", valueType: { kind: "bool" } },
+    ],
+  });
+  function makeBoolUses(overrides: Partial<UsesNode>): UsesNode {
+    return {
+      id: "widget/composition/toggle-instance",
+      kind: "uses",
+      origin: "own",
+      assertable: false,
+      name: "toggle-instance",
+      component: "toggle",
+      resolvedComponent: childBool,
+      ...overrides,
+    };
+  }
+
+  it("accepts a valid computed {expr} prop referencing a field's derived <name>Valid", () => {
+    const widget = makeWidget({
+      declarations: [username],
+      composition: [
+        makeBoolUses({ root: true, props: { disabled: { expr: { type: "ref", name: "usernameValid" } } } }),
+      ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when a computed {expr} prop references an unknown name", () => {
+    const widget = makeWidget({
+      declarations: [username],
+      composition: [
+        makeBoolUses({ root: true, props: { disabled: { expr: { type: "ref", name: "userValid" } } } }),
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/invalid computed expression/);
+  });
+
+  it("throws when a computed {expr} prop's type doesn't match the referenced prop's declared type", () => {
+    const widget = makeWidget({
+      declarations: [username],
+      composition: [
+        makeBoolUses({ root: true, props: { disabled: { expr: { type: "ref", name: "username" } } } }),
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/computed expression has type 'string', expected 'bool'/);
+  });
+
+  const closedEvent: EventNode = {
+    id: "widget/declarations/closed",
+    kind: "event",
+    origin: "own",
+    assertable: false,
+    name: "closed",
+    payloadType: { kind: "record", fields: {} },
+  };
+  const loginEvent: EventNode = {
+    id: "widget/declarations/login",
+    kind: "event",
+    origin: "own",
+    assertable: false,
+    name: "login",
+    payloadType: { kind: "record", fields: { username: { kind: "string" } } },
+  };
+
+  it("accepts a multi-target 'on' wire with a correctly-populated payload", () => {
+    const widget = makeWidget({
+      declarations: [username, closedEvent, loginEvent],
+      composition: [
+        makeUses({
+          root: true,
+          on: { press: [{ event: "login", payload: { username: "username" } }, { event: "closed" }] },
+        }),
+      ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when a multi-target 'on' wire is missing a required payload field", () => {
+    const widget = makeWidget({
+      declarations: [username, loginEvent],
+      composition: [makeUses({ root: true, on: { press: { event: "login" } } })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/missing required field 'username'/);
+  });
+
+  it("throws when a multi-target 'on' wire's payload has a key not in the event's payloadType", () => {
+    const widget = makeWidget({
+      declarations: [username, closedEvent],
+      composition: [makeUses({ root: true, on: { press: { event: "closed", payload: { bogus: "username" } } } })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/payload key 'bogus' not in 'closed''s declared payloadType/);
+  });
+
+  it("throws when a multi-target 'on' wire's payload source is neither a declared field nor a declared prop", () => {
+    const widget = makeWidget({
+      declarations: [loginEvent],
+      composition: [makeUses({ root: true, on: { press: { event: "login", payload: { username: "nonexistent" } } } })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/payload source 'nonexistent' is neither a declared field nor a declared prop/);
+  });
+
+  it("still accepts the original bare-string 'on' sugar (backward compatible)", () => {
+    const widget = makeWidget({
+      declarations: [closedEvent],
+      composition: [makeUses({ root: true, on: { press: "closed" } })],
     });
     expect(() => checkComposition(widget)).not.toThrow();
   });

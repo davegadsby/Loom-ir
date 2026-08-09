@@ -25,7 +25,7 @@ export function ConfirmationDialog(props: ConfirmationDialogProps): React.ReactE
       data-loom-component="confirmation-dialog"
     >
       {open && (
-        <Dialog title={"Confirm Deletion"} body={"This action cannot be undone. Are you sure you want to delete this item?"} actions={<><Button variant={"primary"} onPress={() => onClosed?.({})}>{"Confirm"}</Button></>} />
+        <Dialog title={"Confirm Deletion"} body={"This action cannot be undone. Are you sure you want to delete this item?"} actions={<><Button variant={"primary"} onPress={() => { onClosed?.({  }); }}>{"Confirm"}</Button></>} />
       )}
     </div>
   );

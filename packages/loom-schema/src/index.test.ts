@@ -77,4 +77,52 @@ describe("validateNodeBlock", () => {
     });
     expect(block.kind).toBe("event");
   });
+
+  it("accepts a valid field block with all optional properties", () => {
+    const block = validateNodeBlock({
+      kind: "field",
+      secret: true,
+      initialValue: "",
+      validate: "len(password) >= 8",
+      invalidMessage: "Password must be at least 8 characters.",
+    });
+    expect(block.kind).toBe("field");
+  });
+
+  it("accepts a minimal field block with only kind", () => {
+    expect(validateNodeBlock({ kind: "field" })).toMatchObject({ kind: "field" });
+  });
+
+  it("accepts slotContent.fields", () => {
+    const block = validateNodeBlock({
+      kind: "uses",
+      component: "dialog",
+      slotContent: { body: { fields: ["username", "password"] } },
+    });
+    expect(block.kind).toBe("uses");
+  });
+
+  it("accepts on as a single onWireTarget object with a payload", () => {
+    const block = validateNodeBlock({
+      kind: "uses",
+      component: "button",
+      on: { press: { event: "login", payload: { username: "username", password: "password" } } },
+    });
+    expect(block.kind).toBe("uses");
+  });
+
+  it("accepts on as an array mixing bare-string sugar and onWireTarget objects", () => {
+    const block = validateNodeBlock({
+      kind: "uses",
+      component: "button",
+      on: { press: [{ event: "login", payload: { username: "username" } }, "closed"] },
+    });
+    expect(block.kind).toBe("uses");
+  });
+
+  it("rejects an onWireTarget missing the required 'event' field", () => {
+    expect(() =>
+      validateNodeBlock({ kind: "uses", component: "button", on: { press: { payload: { username: "username" } } } })
+    ).toThrow(SchemaValidationError);
+  });
 });

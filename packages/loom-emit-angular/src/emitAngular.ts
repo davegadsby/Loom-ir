@@ -1,6 +1,14 @@
-import type { ComponentNode, EmittedFile, EventNode, UsesNode } from "loom-ir";
+import type { ComponentNode, EmittedFile, EventNode, FieldNode, PropNode, UsesNode } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import { loomTypeToTs } from "./loomTypeToTs.js";
+
+function isComputedPropValue(v: unknown): v is { expr: unknown } {
+  return v !== null && typeof v === "object" && !Array.isArray(v) && "expr" in v;
+}
+
+function hasComputedProps(nodes: readonly UsesNode[]): boolean {
+  return nodes.some((n) => Object.values(n.props ?? {}).some(isComputedPropValue));
+}
 
 function capitalize(s: string): string {
   return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
@@ -8,6 +16,29 @@ function capitalize(s: string): string {
 
 function pascalCase(slug: string): string {
   return slug.split("-").map(capitalize).join("");
+}
+
+/** Prop/slot/field names come from spec slugs and may contain hyphens, which aren't valid in a JS identifier. */
+function camelCase(slug: string): string {
+  const [first, ...rest] = slug.split("-");
+  return [first, ...rest.map(capitalize)].join("");
+}
+
+/** Name of the class getter backing one composed node's one `{expr}` prop — e.g. `login-button` + `disabled` -> `loginButtonDisabled`. */
+function computedPropGetterName(nodeName: string, propName: string): string {
+  return `${camelCase(nodeName)}${capitalize(camelCase(propName))}`;
+}
+
+/** `{ propName: this.propName, fieldName: this.fieldName, fieldNameValid: this.fieldNameValid, ... }` — the env a computed-prop getter or a field's own validity evaluates against. */
+function envLiteral(props: readonly PropNode[], fields: readonly FieldNode[]): string {
+  const parts = [
+    ...props.map((p) => `${p.name}: this.${camelCase(p.name)}`),
+    ...fields.flatMap((f) => {
+      const c = camelCase(f.name);
+      return [`${f.name}: this.${c}`, `${f.name}Valid: this.${c}Valid`];
+    }),
+  ];
+  return `{ ${parts.join(", ")} }`;
 }
 
 function stateLiteral(state: ComponentNode["states"][number]): string {
@@ -63,20 +94,52 @@ function angularBinding(key: string, value: unknown): string {
 }
 
 /**
- * Recursively renders one `UsesNode` (and, through `slotContent.*.uses`, its
- * nested children) as an Angular template fragment. Unlike React, a
- * resolved child's named slots are `<ng-content select="[slot=name]">`
- * projections against light-DOM markup, so slot content becomes
- * `<div slot="name">...</div>` children — never attributes. `on` wiring
- * becomes a real Angular output binding targeting the already-generated
- * `@Output()` member on *this* component.
+ * A native `<input>` bound to this field's own class members — `value`/
+ * `touched` are set together by the generated `on<Name>Input` method, the
+ * derived `<name>Valid` getter is referenced directly (Angular templates
+ * can evaluate a class getter but never an imported function), and the
+ * invalid message (if any) only shows once the field has been touched,
+ * via `*ngIf`.
  */
-function renderUsesTemplate(node: UsesNode, byName: ReadonlyMap<string, UsesNode>): string {
+function renderFieldTemplate(field: FieldNode): string {
+  const camel = camelCase(field.name);
+  const Camel = capitalize(camel);
+  const inputType = field.secret ? "password" : "text";
+  const parts = [
+    `<input type="${inputType}" name="${field.name}" [value]="${camel}" (input)="on${Camel}Input($event)" [attr.aria-invalid]="${camel}Touched && !${camel}Valid" />`,
+  ];
+  if (field.invalidMessage) {
+    parts.push(
+      `<span *ngIf="${camel}Touched && !${camel}Valid" data-loom-field-error="${field.name}">${escapeHtml(field.invalidMessage)}</span>`
+    );
+  }
+  return parts.join("");
+}
+
+/**
+ * Recursively renders one `UsesNode` (and, through `slotContent.*.uses`/
+ * `slotContent.*.fields`, its nested children/native fields) as an Angular
+ * template fragment. Unlike React, a resolved child's named slots are
+ * `<ng-content select="[slot=name]">` projections against light-DOM markup,
+ * so slot content becomes `<div slot="name">...</div>` children — never
+ * attributes. A `{ expr }` prop value can't be evaluated inline (Angular
+ * templates can't call an imported function), so it binds to a named class
+ * getter instead. `on` wiring becomes one or more real Angular output-
+ * binding statements targeting the already-generated `@Output()` member(s)
+ * on *this* component — bare-string sugar keeps forwarding `$event`
+ * untouched (today's only shape, still valid), while an explicit
+ * `{ event, payload }` target constructs its payload from sibling field/prop
+ * class members (referenced bare, the way any template expression reaches a
+ * class member).
+ */
+function renderUsesTemplate(node: UsesNode, byName: ReadonlyMap<string, UsesNode>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
   const ref = node.resolvedComponent;
   const selector = `loom-${ref.name}`;
   const refSlots = ref.declarations.filter((d) => d.kind === "slot");
 
-  const propAttrs = Object.entries(node.props ?? {}).map(([k, v]) => angularBinding(k, v));
+  const propAttrs = Object.entries(node.props ?? {}).map(([k, v]) =>
+    isComputedPropValue(v) ? `[${k}]="${computedPropGetterName(node.name, k)}"` : angularBinding(k, v)
+  );
 
   const body: string[] = [];
   for (const slot of refSlots) {
@@ -85,13 +148,21 @@ function renderUsesTemplate(node: UsesNode, byName: ReadonlyMap<string, UsesNode
     const inner =
       "text" in content
         ? escapeHtml(content.text)
-        : content.uses.map((n) => renderUsesTemplate(byName.get(n)!, byName)).join("");
+        : "uses" in content
+          ? content.uses.map((n) => renderUsesTemplate(byName.get(n)!, byName, fieldsByName)).join("")
+          : content.fields.map((n) => renderFieldTemplate(fieldsByName.get(n)!)).join("");
     body.push(slot.name === "default" ? inner : `<div slot="${slot.name}">${inner}</div>`);
   }
 
-  const onAttrs = Object.entries(node.on ?? {}).map(
-    ([childEventName, ownEventName]) => `(${childEventName})="${ownEventName}.emit($event)"`
-  );
+  const onAttrs = Object.entries(node.on ?? {}).map(([childEventName, wireRaw]) => {
+    const wires = Array.isArray(wireRaw) ? wireRaw : [wireRaw];
+    const calls = wires.map((w) => {
+      if (typeof w === "string") return `${w}.emit($event)`;
+      const payloadEntries = Object.entries(w.payload ?? {}).map(([k, source]) => `${k}: ${source}`);
+      return `${w.event}.emit({ ${payloadEntries.join(", ")} })`;
+    });
+    return `(${childEventName})="${calls.join("; ")}"`;
+  });
 
   const attrs = [...propAttrs, ...onAttrs];
   const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
@@ -167,6 +238,9 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   const referencedComponents = collectReferencedComponents(component.composition);
   const usesNgIf = !!rootUses?.visibleWhen;
   const hasFiresWhen = events.some((e) => e.firesWhen);
+  const fields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
+  const fieldsByName = new Map(fields.map((f) => [f.name, f] as const));
+  const needsEvaluate = fields.length > 0 || hasComputedProps(component.composition);
 
   const coreImports = ["Component", "EventEmitter", "Input", "Output"];
   if (hasFiresWhen) coreImports.push("OnChanges", "SimpleChanges");
@@ -179,6 +253,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     `import { ${coreImports.join(", ")} } from "@angular/core";`,
     usesNgIf ? `import { NgIf } from "@angular/common";` : undefined,
     hasMachine ? `import { LoomMachine, Transition, Guard } from "loom-expr";` : undefined,
+    needsEvaluate ? `import { evaluate } from "loom-expr";` : undefined,
     ...referencedComponents.map((c) => `import { ${pascalCase(c.name)}Component } from "./${pascalCase(c.name)}.component";`),
     ``,
   ].filter((l): l is string => l !== undefined);
@@ -204,7 +279,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   let templateBody: string;
   if (rootUses) {
     const byName = new Map(component.composition.map((n) => [n.name, n] as const));
-    const composed = renderUsesTemplate(rootUses, byName);
+    const composed = renderUsesTemplate(rootUses, byName, fieldsByName);
     templateBody = rootUses.visibleWhen ? `<ng-container *ngIf="${rootUses.visibleWhen}">${composed}</ng-container>` : composed;
   } else {
     const namedSlots = slots.filter((s) => s.name !== "default");
@@ -234,6 +309,34 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   for (const event of events) {
     lines.push(`  /** ${event.id} */`);
     lines.push(`  @Output() ${event.name} = new EventEmitter<${loomTypeToTs(event.payloadType)}>();`);
+  }
+
+  for (const field of fields) {
+    const camel = camelCase(field.name);
+    const Camel = capitalize(camel);
+    lines.push(`  ${camel}: string = ${JSON.stringify(field.initialValue ?? "")};`);
+    lines.push(`  ${camel}Touched: boolean = false;`);
+    const validExpr = field.validate
+      ? `evaluate(${JSON.stringify(field.validate)}, { ${field.name}: this.${camel} }) === true`
+      : `true`;
+    lines.push(`  get ${camel}Valid(): boolean {`);
+    lines.push(`    return ${validExpr};`);
+    lines.push(`  }`);
+    lines.push(`  on${Camel}Input(event: Event): void {`);
+    lines.push(`    this.${camel} = (event.target as HTMLInputElement).value;`);
+    lines.push(`    this.${camel}Touched = true;`);
+    lines.push(`  }`);
+    lines.push(``);
+  }
+
+  for (const node of component.composition) {
+    for (const [propName, value] of Object.entries(node.props ?? {})) {
+      if (!isComputedPropValue(value)) continue;
+      lines.push(`  get ${computedPropGetterName(node.name, propName)}(): boolean {`);
+      lines.push(`    return evaluate(${JSON.stringify(value.expr)}, ${envLiteral(props, fields)}) === true;`);
+      lines.push(`  }`);
+      lines.push(``);
+    }
   }
 
   lines.push(...firesWhenLines(events));

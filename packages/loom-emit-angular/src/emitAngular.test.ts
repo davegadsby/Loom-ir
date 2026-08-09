@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitAngular } from "./emitAngular.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture } from "./fixtures.js";
 
 describe("emitAngular", () => {
   it("emits one *.component.ts file per component", () => {
@@ -133,5 +133,42 @@ describe("emitAngular — composition", () => {
     expect(file!.contents).toContain("ngOnChanges(changes: SimpleChanges): void {");
     expect(file!.contents).toContain("if ('open' in changes && !changes['open'].firstChange && changes['open'].currentValue === true) {");
     expect(file!.contents).toContain("this.opened.emit({});");
+  });
+});
+
+describe("emitAngular — native fields, computed getters, on wiring", () => {
+  it("renders a FieldNode's own class members, a get <name>Valid() getter (not an inline evaluate call), and an on<Name>Input method", () => {
+    const [file] = emitAngular(makeLoginFixture());
+    expect(file!.contents).toContain('import { evaluate } from "loom-expr";');
+    expect(file!.contents).toContain('  username: string = "";');
+    expect(file!.contents).toContain("  usernameTouched: boolean = false;");
+    expect(file!.contents).toContain("  get usernameValid(): boolean {");
+    expect(file!.contents).toContain("{ username: this.username }) === true;");
+    expect(file!.contents).toContain("  onUsernameInput(event: Event): void {");
+    expect(file!.contents).toContain("this.username = (event.target as HTMLInputElement).value;");
+    expect(file!.contents).toContain("this.usernameTouched = true;");
+  });
+
+  it("renders the field as a native input plus a *ngIf-gated error span, bound to class members/getters (not $event)", () => {
+    const [file] = emitAngular(makeLoginFixture());
+    expect(file!.contents).toContain(
+      '<input type="text" name="username" [value]="username" (input)="onUsernameInput($event)" [attr.aria-invalid]="usernameTouched && !usernameValid" />'
+    );
+    expect(file!.contents).toContain(
+      '<span *ngIf="usernameTouched && !usernameValid" data-loom-field-error="username">Enter a valid email address.</span>'
+    );
+  });
+
+  it("emits a named getter (not an inline evaluate call in the template) for a computed prop, referenced via a property binding", () => {
+    const [file] = emitAngular(makeLoginFixture());
+    expect(file!.contents).toContain("get loginButtonDisabled(): boolean {");
+    expect(file!.contents).toContain("{ username: this.username, usernameValid: this.usernameValid }) === true;");
+    expect(file!.contents).toContain('[disabled]="loginButtonDisabled"');
+    expect(file!.contents).not.toContain('[disabled]="evaluate(');
+  });
+
+  it("wires a multi-target on inline as chained X.emit({...}) template statements, payload sourced from the field's own class member", () => {
+    const [file] = emitAngular(makeLoginFixture());
+    expect(file!.contents).toContain('(press)="login.emit({ username: username }); closed.emit({  })"');
   });
 });

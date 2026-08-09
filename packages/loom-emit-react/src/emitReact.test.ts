@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitReact } from "./emitReact.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture } from "./fixtures.js";
 
 describe("emitReact", () => {
   it("emits one PascalCase-named file per component", () => {
@@ -115,7 +115,7 @@ describe("emitReact — composition", () => {
     expect(file!.contents).toContain("{open && (");
     expect(file!.contents).toContain('<Dialog title={"Confirm Deletion"} actions={<><Button');
     expect(file!.contents).toContain('variant={"primary"}');
-    expect(file!.contents).toContain('onPress={() => onClosed?.({})}');
+    expect(file!.contents).toContain('onPress={() => { onClosed?.({  }); }}');
     expect(file!.contents).toContain('{"Confirm"}</Button></>} />');
   });
 
@@ -135,5 +135,49 @@ describe("emitReact — composition", () => {
   it("does not render the per-slot loop when a root composition node is present", () => {
     const [file] = emitReact(makeCompositionFixture());
     expect(file!.contents).not.toContain("data-loom-slot");
+  });
+});
+
+describe("emitReact — native fields, computed props, multi-target on", () => {
+  it("renders a FieldNode's local state, change handler, and live-evaluated validity", () => {
+    const [file] = emitReact(makeLoginFixture());
+    expect(file!.contents).toContain('import { evaluate } from "loom-expr";');
+    expect(file!.contents).toContain(
+      '  const [usernameValue, setUsernameValue] = React.useState<string>("");'
+    );
+    expect(file!.contents).toContain(
+      "  const [usernameTouched, setUsernameTouched] = React.useState<boolean>(false);"
+    );
+    expect(file!.contents).toContain("const usernameValid = evaluate(");
+    expect(file!.contents).toContain('{ username: usernameValue }) === true;');
+    expect(file!.contents).toContain("const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {");
+    expect(file!.contents).toContain("setUsernameValue(e.target.value);");
+    expect(file!.contents).toContain("setUsernameTouched(true);");
+  });
+
+  it("renders the field as a native input plus a conditional error message gated on touched && !valid", () => {
+    const [file] = emitReact(makeLoginFixture());
+    expect(file!.contents).toContain(
+      '<input type="text" name="username" value={usernameValue} onChange={handleUsernameChange} aria-invalid={usernameTouched && !usernameValid} />'
+    );
+    expect(file!.contents).toContain(
+      '{usernameTouched && !usernameValid && <span data-loom-field-error="username">{"Enter a valid email address."}</span>}'
+    );
+  });
+
+  it("builds __env from own props and derived field validity, and evaluates a computed prop against it", () => {
+    const [file] = emitReact(makeLoginFixture());
+    expect(file!.contents).toContain(
+      "  const __env: any = { username: usernameValue, usernameValid: usernameValid };"
+    );
+    expect(file!.contents).toContain("<Button disabled={evaluate(");
+    expect(file!.contents).toContain(", __env) === true}");
+  });
+
+  it("wires a multi-target on: both callbacks invoked in one handler, payload sourced from field value", () => {
+    const [file] = emitReact(makeLoginFixture());
+    expect(file!.contents).toContain(
+      "onPress={() => { onLogin?.({ username: usernameValue }); onClosed?.({  }); }}"
+    );
   });
 });
