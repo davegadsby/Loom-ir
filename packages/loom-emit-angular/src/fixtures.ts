@@ -37,6 +37,7 @@ export function makeFixture(): ComponentNode {
         payloadType: { kind: "record", fields: { checked: { kind: "bool" } } },
       },
       { id: "checkbox/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+      { id: "checkbox/declarations/helper-text", kind: "slot", origin: "own", assertable: false, name: "helper-text" },
       {
         id: "checkbox/declarations/focus",
         kind: "method",

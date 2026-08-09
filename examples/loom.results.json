@@ -1,0 +1,28 @@
+{
+  "interactive-base/claims/disabled-not-focusable": {
+    "status": "passed",
+    "runAt": "2026-08-09T14:02:11Z",
+    "durationMs": 4
+  },
+  "checkbox/claims/transitions-stay-within-declared-states": {
+    "status": "passed",
+    "runAt": "2026-08-09T14:02:11Z",
+    "durationMs": 9
+  },
+  "checkbox/claims/click-checks-an-unchecked-box": {
+    "status": "failed",
+    "runAt": "2026-08-09T14:02:12Z",
+    "durationMs": 210,
+    "message": "expected data-state to be 'checked' after click, got 'unchecked'"
+  },
+  "disclosure/claims/expanding-requires-not-disabled": {
+    "status": "passed",
+    "runAt": "2026-08-09T14:03:40Z",
+    "durationMs": 3
+  },
+  "disclosure/claims/click-expands-a-collapsed-panel": {
+    "status": "passed",
+    "runAt": "2026-08-09T14:03:41Z",
+    "durationMs": 187
+  }
+}

@@ -24,6 +24,17 @@ describe("emitReact", () => {
     expect(file!.contents).toContain("{children}");
   });
 
+  it("adds a camelCased named prop (not children) for a non-default slot", () => {
+    const [file] = emitReact(makeFixture());
+    expect(file!.contents).toContain("helperText?: React.ReactNode;");
+    expect(file!.contents).toContain("checkbox/declarations/helper-text");
+    expect(file!.contents).toContain('<div data-loom-slot="helper-text">{helperText}</div>');
+    // both slots destructured together, alongside the props, in declaration order
+    expect(file!.contents).toContain(
+      "const { disabled = false, checked = false, children, helperText } = props;"
+    );
+  });
+
   it("skips MethodNode and logs a warning instead of throwing", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const [file] = emitReact(makeFixture());

@@ -9,6 +9,17 @@ function pascalCase(slug: string): string {
   return slug.split("-").map(capitalize).join("");
 }
 
+/** Slot/prop names come from spec slugs and may contain hyphens, which aren't valid in a JS identifier. */
+function camelCase(slug: string): string {
+  const [first, ...rest] = slug.split("-");
+  return [first, ...rest.map(capitalize)].join("");
+}
+
+/** The default slot maps to React's built-in `children`; every other slot becomes its own named prop. */
+function slotPropName(slotName: string): string {
+  return slotName === "default" ? "children" : camelCase(slotName);
+}
+
 function machineLiteral(component: ComponentNode): string {
   const states = component.states.map((s) => ({ id: s.name, ...s.flags }));
   const transitions = component.transitions.map((t) => ({
@@ -25,13 +36,15 @@ function machineLiteral(component: ComponentNode): string {
  * Compiles a `ComponentNode` to a minimal React function component (§4/§14
  * step 5 — the first framework target).
  *
- * Declarations become a typed props interface. If the component has a
- * machine, it's embedded as data and driven at runtime through loom-expr's
- * `evaluate` — the same interpreter loom-emit-tests reuses for generated
- * tests — rather than transpiling each guard into bespoke JS. Only a
- * generic `click` interaction is wired up for now (key/pointer triggers are
- * a backend TODO); `MethodNode`s have no React rendering strategy yet and
- * are skipped rather than failing the whole emission (§14 step 5's "skip,
+ * Declarations become a typed props interface. A `SlotNode` named
+ * `"default"` maps to React's built-in `children`; any other slot becomes
+ * its own `React.ReactNode` prop. If the component has a machine, it's
+ * embedded as data and driven at runtime through loom-expr's `evaluate` —
+ * the same interpreter loom-emit-tests reuses for generated tests — rather
+ * than transpiling each guard into bespoke JS. Only a generic `click`
+ * interaction is wired up for now (key/pointer triggers are a backend
+ * TODO); `MethodNode`s have no React rendering strategy yet and are
+ * skipped rather than failing the whole emission (§14 step 5's "skip,
  * don't throw" contract).
  */
 export function emitReact(component: ComponentNode): EmittedFile[] {
@@ -71,16 +84,16 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(`  /** ${event.id} */`);
     lines.push(`  on${capitalize(event.name)}?: (payload: ${loomTypeToTs(event.payloadType)}) => void;`);
   }
-  if (slots.some((s) => s.name === "default")) {
-    lines.push(`  children?: React.ReactNode;`);
+  for (const slot of slots) {
+    lines.push(`  /** ${slot.id} */`);
+    lines.push(`  ${slotPropName(slot.name)}?: React.ReactNode;`);
   }
   lines.push(`}`, ``);
 
   lines.push(`export function ${componentName}(props: ${componentName}Props): React.ReactElement {`);
   const destructured = props.map((p) => `${p.name} = ${JSON.stringify(p.defaultValue ?? null)}`);
   if (destructured.length > 0 || slots.length > 0) {
-    const parts = [...destructured];
-    if (slots.some((s) => s.name === "default")) parts.push("children");
+    const parts = [...destructured, ...slots.map((s) => slotPropName(s.name))];
     lines.push(`  const { ${parts.join(", ")} } = props;`);
   }
 
@@ -107,7 +120,14 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   if (disabledProp) lines.push(`      aria-disabled={disabled}`);
   if (component.transitions.length > 0) lines.push(`      onClick={() => dispatch("click")}`);
   lines.push(`    >`);
-  if (slots.some((s) => s.name === "default")) lines.push(`      {children}`);
+  for (const slot of slots) {
+    const varName = slotPropName(slot.name);
+    if (slot.name === "default") {
+      lines.push(`      {children}`);
+    } else {
+      lines.push(`      <div data-loom-slot=${JSON.stringify(slot.name)}>{${varName}}</div>`);
+    }
+  }
   lines.push(`    </div>`);
   lines.push(`  );`);
   lines.push(`}`, ``);

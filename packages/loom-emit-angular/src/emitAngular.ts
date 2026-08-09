@@ -32,7 +32,12 @@ function machineLiteral(component: ComponentNode): string {
  * `MethodNode` is skipped the same way. Only the framework idiom differs
  * (decorators + a template string vs. JSX) — porting cost was a rename of
  * the surface syntax, not a redesign, which is the concrete evidence for
- * §4's "one IR, many targets" claim.
+ * §4's "one IR, many targets" claim. `SlotNode` is the one place the two
+ * backends genuinely diverge in mechanism rather than just syntax: React
+ * has no native named-slot concept so each slot becomes a typed prop,
+ * while Angular projects content by CSS selector, so each slot becomes an
+ * `<ng-content select="...">` instead — same IR node, the idiomatic
+ * mechanism for each framework.
  */
 export function emitAngular(component: ComponentNode): EmittedFile[] {
   const componentName = pascalCase(component.name);
@@ -72,7 +77,17 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   if (pattern) attrs.push(`[attr.role]="'${pattern.pattern}'"`);
   if (disabledProp) attrs.push(`[attr.aria-disabled]="disabled"`);
   if (hasMachine) attrs.push(`(click)="dispatch('click')"`);
-  const templateBody = slots.some((s) => s.name === "default") ? "<ng-content></ng-content>" : "";
+  // Angular projects by CSS selector against the light DOM, not by prop —
+  // a named slot becomes `<ng-content select="[slot=name]">`, matching
+  // `<div slot="name">` markup the consumer provides. The selector-less
+  // `<ng-content>` for a "default" slot is emitted last so it only picks up
+  // whatever the named selectors didn't already claim.
+  const namedSlots = slots.filter((s) => s.name !== "default");
+  const defaultSlot = slots.find((s) => s.name === "default");
+  const templateBody = [
+    ...namedSlots.map((slot) => `<ng-content select="[slot=${slot.name}]"></ng-content>`),
+    ...(defaultSlot ? ["<ng-content></ng-content>"] : []),
+  ].join("");
   const template = `<div ${attrs.join(" ")}>${templateBody}</div>`;
 
   lines.push(`@Component({`);

@@ -1,0 +1,24 @@
+$ loom report examples/specs/disclosure.md --results examples/loom.results.json
+
+not-applicable component            disclosure
+not-applicable prop                 interactive-base/declarations/disabled
+not-applicable prop                 disclosure/declarations/expanded
+not-applicable event                disclosure/declarations/toggle
+not-applicable slot                 disclosure/declarations/trigger
+not-applicable slot                 disclosure/declarations/panel
+not-applicable method               disclosure/declarations/focus-trigger
+not-applicable state                disclosure/machine/collapsed
+not-applicable state                disclosure/machine/expanded
+not-applicable transition           disclosure/machine/expand
+not-applicable transition           disclosure/machine/collapse
+not-applicable guard                disclosure/machine/can-toggle
+not-applicable rule                 disclosure/machine/disabled-locks-collapsed
+confirmed      property             interactive-base/claims/disabled-not-focusable
+confirmed      invariant            disclosure/claims/expanding-requires-not-disabled
+confirmed      path                 disclosure/claims/click-expands-a-collapsed-panel
+unverified     property             disclosure/claims/transitions-stay-within-declared-states
+unverified     pattern-conformance  disclosure/a11y/disclosure-pattern
+not-applicable aria-relation        disclosure/a11y/panel-relation
+unverified     delta                disclosure/a11y/focus-not-trapped-delta
+not-applicable intent               disclosure/prose/intent
+not-applicable rationale            disclosure/prose/rationale

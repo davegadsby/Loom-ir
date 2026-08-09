@@ -1,0 +1,5 @@
+$ loom validate examples/specs/checkbox.md --results examples/loom.results.json
+
+emission coverage:    80.0% (4/5)
+result coverage:      75.0% (3/4)
+expressibility ratio: 80.0% (4/5)
