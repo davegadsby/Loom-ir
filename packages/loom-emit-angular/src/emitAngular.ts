@@ -28,7 +28,7 @@ function machineLiteral(component: ComponentNode): string {
  *
  * Deliberately mirrors loom-emit-react's strategy exactly: the same
  * `Declarations` nodes become typed `@Input`/`@Output` members, the same
- * embedded machine is driven at runtime through loom-expr's `evaluate`, and
+ * machine is instantiated at runtime as a loom-expr `LoomMachine`, and
  * `MethodNode` is skipped the same way. Only the framework idiom differs
  * (decorators + a template string vs. JSX) — porting cost was a rename of
  * the surface syntax, not a redesign, which is the concrete evidence for
@@ -61,12 +61,12 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
       ? `// Unsupported by this backend: ${unsupported.map((n) => n.id).join(", ")}`
       : undefined,
     `import { Component, EventEmitter, Input, Output } from "@angular/core";`,
-    hasMachine ? `import { evaluate } from "loom-expr";` : undefined,
+    hasMachine ? `import { LoomMachine } from "loom-expr";` : undefined,
     ``,
   ].filter((l): l is string => l !== undefined);
 
   if (hasMachine) {
-    lines.push(`const __machine: any = ${machineLiteral(component)};`, ``);
+    lines.push(`const __machine = new LoomMachine(${machineLiteral(component)});`, ``);
   }
 
   // Static string values are bound as single-quoted TS literals inside the
@@ -107,16 +107,12 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   }
 
   if (hasMachine) {
-    lines.push(`  state: string = __machine.states[0]?.id;`);
+    lines.push(`  state: string = __machine.initialState;`);
     lines.push(``);
     lines.push(`  dispatch(eventName: string): void {`);
     lines.push(`    const env: any = { ${props.map((p) => `${p.name}: this.${p.name}`).join(", ")} };`);
-    lines.push(`    const transition = __machine.transitions.find(`);
-    lines.push(
-      `      (t: any) => t.from === this.state && t.trigger?.kind === "event" && t.trigger?.name === eventName && (!t.guard || evaluate(t.guard, env) === true)`
-    );
-    lines.push(`    );`);
-    lines.push(`    if (transition) this.state = transition.to;`);
+    lines.push(`    const next = __machine.dispatch(this.state, eventName, env);`);
+    lines.push(`    if (next) this.state = next;`);
     lines.push(`  }`);
   }
 

@@ -11,3 +11,6 @@ export { evaluate, enumerateDomain } from "./evaluate.js";
 export type { EvalContext } from "./evaluate.js";
 export { domainToArbitrary, arbitraryForType } from "./sampling.js";
 export type { SamplingContext } from "./sampling.js";
+
+export { LoomMachine, Transition, Guard } from "./machine.js";
+export type { MachineConfig, StateConfig, TransitionConfig, TriggerConfig } from "./machine.js";
