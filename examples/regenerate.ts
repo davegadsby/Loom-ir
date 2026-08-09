@@ -9,14 +9,26 @@
  * Run via `pnpm examples:generate`. `loom-cli/src/examplesUpToDate.test.ts`
  * re-runs the same compile calls into a tmp dir and fails the suite if the
  * committed files and a fresh run ever disagree.
+ *
+ * examples/figma-variables-fixture.json stands in for a real Figma Variables
+ * REST API response (`GET /v1/files/:file_key/variables/local`) — this
+ * sandbox has no live Figma access, so it's hand-authored in that exact
+ * shape rather than fetched. `examples/design-tokens.json` and
+ * `examples/figma.lock.json` are this script's *output*: the tool-agnostic
+ * DTCG tokens and lock the rest of the pipeline (checkbox.md's Style
+ * section, loom-emit-styles) actually consumes. `now` is fixed so the lock's
+ * `importedAt` stays deterministic — required for the byte-for-byte drift
+ * check the same way every other generated file already is.
  */
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { loadComponent, writeFiles, emitAllTests } from "loom-cli";
 import { emitReact } from "loom-emit-react";
 import { emitAngular } from "loom-emit-angular";
+import { emitTokensCss, emitComponentCss } from "loom-emit-styles";
+import { importFigmaVariables, type FigmaVariablesResponse } from "loom-tokens-import-figma";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const specsDir = join(here, "specs");
@@ -29,15 +41,34 @@ const cliBin = join(repoRoot, "packages", "loom-cli", "dist", "bin.js");
 // something anyone compiles to a component on its own.
 const components = ["checkbox", "disclosure"];
 
+const figmaResponse: FigmaVariablesResponse = JSON.parse(
+  readFileSync(join(here, "figma-variables-fixture.json"), "utf8")
+);
+const { tokens, lock } = importFigmaVariables(figmaResponse, {
+  sourceRef: "examples/figma-variables-fixture.json",
+  now: () => new Date("2026-01-01T00:00:00Z"),
+});
+writeFileSync(join(here, "design-tokens.json"), JSON.stringify(tokens, null, 2) + "\n", "utf8");
+writeFileSync(join(here, "figma.lock.json"), JSON.stringify(lock, null, 2) + "\n", "utf8");
+
+console.log(`Regenerated examples/{design-tokens.json,figma.lock.json} from examples/figma-variables-fixture.json`);
+
 for (const name of components) {
   const component = loadComponent(join(specsDir, `${name}.md`));
 
   writeFiles(join(generatedDir, "react"), emitReact(component));
   writeFiles(join(generatedDir, "angular"), emitAngular(component));
   writeFiles(join(generatedDir, "tests"), emitAllTests(component));
+
+  // Only components with Style nodes get a stylesheet — nothing to emit otherwise.
+  if (component.style.length > 0) {
+    writeFiles(join(generatedDir, "styles"), [emitComponentCss(component)]);
+  }
 }
 
-console.log(`Regenerated examples/generated/{react,angular,tests} for: ${components.join(", ")}`);
+writeFiles(join(generatedDir, "styles"), [emitTokensCss(tokens)]);
+
+console.log(`Regenerated examples/generated/{react,angular,tests,styles} for: ${components.join(", ")}`);
 
 // Captures the *actual* CLI output (spawned against the built bin, not a
 // hand-duplicated formatter) so these files can never silently drift from
@@ -60,4 +91,21 @@ for (const name of components) {
   writeFileSync(join(reportsDir, `${name}.validate.txt`), runCli(["validate", specPath, "--results", resultsLedger]), "utf8");
 }
 
-console.log(`Regenerated examples/generated/reports for: ${components.join(", ")}`);
+// checkbox is the only component with a Style section — this is the one
+// place `--tokens`/`--lock` actually have something to check.
+writeFileSync(
+  join(reportsDir, "checkbox.validate-tokens.txt"),
+  runCli([
+    "validate",
+    join(specsDir, "checkbox.md"),
+    "--results",
+    resultsLedger,
+    "--tokens",
+    join(here, "design-tokens.json"),
+    "--lock",
+    join(here, "figma.lock.json"),
+  ]),
+  "utf8"
+);
+
+console.log(`Regenerated examples/generated/reports for: ${components.join(", ")}, checkbox.validate-tokens`);

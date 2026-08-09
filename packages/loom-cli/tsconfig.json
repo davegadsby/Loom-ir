@@ -11,7 +11,10 @@
     { "path": "../loom-emit-angular" },
     { "path": "../loom-emit-tests" },
     { "path": "../loom-results" },
-    { "path": "../loom-validate" }
+    { "path": "../loom-validate" },
+    { "path": "../loom-tokens" },
+    { "path": "../loom-tokens-import-figma" },
+    { "path": "../loom-emit-styles" }
   ],
   "include": ["src"]
 }

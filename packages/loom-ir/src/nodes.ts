@@ -134,6 +134,46 @@ export interface AriaRelationNode extends LoomNodeEnvelope {
 export type A11yNode = PatternConformanceNode | DeltaNode | AriaRelationNode;
 
 // ---------------------------------------------------------------------------
+// Style
+// ---------------------------------------------------------------------------
+
+/**
+ * A structural claim that a stylable `part` binds a CSS `property` to a
+ * named design token — a token *path* (e.g. `color.surface.default`), never
+ * a raw value, the same "structural, not literal" move as node identity
+ * itself. `part` is scoped to `"root"` (the component's own wrapper) or the
+ * name of an existing `SlotNode` for this pass — styling a purely-internal
+ * sub-element the emitters don't already render as its own DOM node would
+ * require generating new structure from the IR, a separate future extension,
+ * not solved speculatively here.
+ */
+export interface TokenRefNode extends LoomNodeEnvelope {
+  kind: "token-ref";
+  part: string;
+  property: string;
+  token: string;
+}
+
+/** A minimal, deliberately small layout intent — a subset of flex/grid, not a CSS reimplementation. */
+export interface LayoutIntentNode extends LoomNodeEnvelope {
+  kind: "layout-intent";
+  part: string;
+  display: "flex" | "grid";
+  direction?: "row" | "column";
+  gapToken?: string;
+  align?: string;
+  justify?: string;
+}
+
+/** Fills the §8 "(visual) | Chromatic | Visual regression" row: a reference frame/baseline id to diff the rendered output against. */
+export interface VisualConformanceNode extends LoomNodeEnvelope {
+  kind: "visual-conformance";
+  reference: string;
+}
+
+export type StyleNode = TokenRefNode | LayoutIntentNode | VisualConformanceNode;
+
+// ---------------------------------------------------------------------------
 // Prose (non-assertable, kept per §11.1)
 // ---------------------------------------------------------------------------
 
@@ -164,9 +204,10 @@ export interface ComponentNode extends LoomNodeEnvelope {
   rules: RuleNode[];
   claims: ClaimNode[];
   a11y: A11yNode[];
+  style: StyleNode[];
   prose: ProseNode[];
 }
 
-export type LoomNode = ComponentNode | DeclarationNode | MachineNode | ClaimNode | A11yNode | ProseNode;
+export type LoomNode = ComponentNode | DeclarationNode | MachineNode | ClaimNode | A11yNode | StyleNode | ProseNode;
 
 export type NodeKind = LoomNode["kind"];

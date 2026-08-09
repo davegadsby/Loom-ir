@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitAngular } from "./emitAngular.js";
-import { makeFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture } from "./fixtures.js";
 
 describe("emitAngular", () => {
   it("emits one *.component.ts file per component", () => {
@@ -88,5 +88,17 @@ describe("emitAngular", () => {
     const [file] = emitAngular(fixture);
     expect(file!.contents).not.toContain("__machine");
     expect(file!.contents).not.toContain("dispatch(eventName");
+  });
+
+  it("adds styleUrls and a static root class when the component has style nodes", () => {
+    const [file] = emitAngular(makeStyledFixture());
+    expect(file!.contents).toContain(`styleUrls: ["./Checkbox.css"],`);
+    expect(file!.contents).toContain(`class="loom-checkbox"`);
+  });
+
+  it("adds neither styleUrls nor a root class when the component has no style nodes", () => {
+    const [file] = emitAngular(makeFixture());
+    expect(file!.contents).not.toContain("styleUrls");
+    expect(file!.contents).not.toContain('class="');
   });
 });

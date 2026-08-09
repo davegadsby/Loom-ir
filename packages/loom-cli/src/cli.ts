@@ -3,6 +3,7 @@ import { compileCommand } from "./commands/compile.js";
 import { validateCommand } from "./commands/validate.js";
 import { reportCommand } from "./commands/report.js";
 import { authorCommand } from "./commands/author.js";
+import { tokensImportCommand } from "./commands/tokensImport.js";
 
 function pct(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`;
@@ -35,6 +36,8 @@ export function buildProgram(): Command {
     .option("--emission-threshold <n>", "minimum emission coverage ratio", parseFloat)
     .option("--result-threshold <n>", "minimum result coverage ratio", parseFloat)
     .option("--expressibility-threshold <n>", "minimum expressibility ratio", parseFloat)
+    .option("--tokens <path>", "DTCG tokens JSON — checks every token-ref/gapToken resolves")
+    .option("--lock <path>", "tokens lock JSON — checks it isn't stale against --tokens (requires --tokens)")
     .action(
       (
         spec: string,
@@ -43,6 +46,8 @@ export function buildProgram(): Command {
           emissionThreshold?: number;
           resultThreshold?: number;
           expressibilityThreshold?: number;
+          tokens?: string;
+          lock?: string;
         }
       ) => {
         const outcome = validateCommand(spec, {
@@ -50,12 +55,32 @@ export function buildProgram(): Command {
           emissionThreshold: opts.emissionThreshold,
           resultThreshold: opts.resultThreshold,
           expressibilityThreshold: opts.expressibilityThreshold,
+          tokens: opts.tokens,
+          lock: opts.lock,
         });
         console.log(`emission coverage:    ${pct(outcome.emission.ratio)} (${outcome.emission.covered}/${outcome.emission.total})`);
         console.log(`result coverage:      ${pct(outcome.result.ratio)} (${outcome.result.covered}/${outcome.result.total})`);
         console.log(
           `expressibility ratio: ${pct(outcome.expressibility.ratio)} (${outcome.expressibility.covered}/${outcome.expressibility.total})`
         );
+        if (outcome.tokensResolve) {
+          console.log(
+            `tokens resolve:       ${outcome.tokensResolve.ok ? "ok" : "FAIL"} (${outcome.tokensResolve.issues.length} issue(s))`
+          );
+          for (const issue of outcome.tokensResolve.issues) {
+            console.error(`FAIL: token '${issue.token}' referenced by '${issue.nodeId}' does not resolve`);
+          }
+          if (!outcome.tokensResolve.ok) process.exitCode = 1;
+        }
+        if (outcome.lockStaleness) {
+          console.log(`tokens lock:          ${outcome.lockStaleness.stale ? "STALE" : "fresh"}`);
+          if (outcome.lockStaleness.stale) {
+            console.error(
+              `FAIL: tokens lock is stale (locked ${outcome.lockStaleness.lockedHash}, current ${outcome.lockStaleness.currentHash})`
+            );
+            process.exitCode = 1;
+          }
+        }
         if (!outcome.gate.passed) {
           for (const failure of outcome.gate.failures) console.error(`FAIL: ${failure}`);
           process.exitCode = 1;
@@ -81,6 +106,28 @@ export function buildProgram(): Command {
     .action((name: string, opts: { out: string }) => {
       const path = authorCommand(name, { out: opts.out });
       console.log(`wrote ${path}`);
+    });
+
+  const tokens = program.command("tokens").description("Design-token import commands");
+
+  tokens
+    .command("import")
+    .description("Import a design tool's export into the tool-agnostic DTCG tokens format")
+    .requiredOption("--tool <tool>", "design tool the export came from (currently: figma)")
+    .requiredOption("--in <path>", "path to the tool's export JSON")
+    .requiredOption("--out <path>", "path to write the DTCG tokens JSON")
+    .option("--lock-out <path>", "path to write the tokens lock JSON (defaults to <out> with .lock.json)")
+    .option("--source-ref <ref>", "identifies the source design file on the lock (defaults to --in)")
+    .action((opts: { tool: string; in: string; out: string; lockOut?: string; sourceRef?: string }) => {
+      const result = tokensImportCommand({
+        tool: opts.tool,
+        in: opts.in,
+        out: opts.out,
+        lockOut: opts.lockOut,
+        sourceRef: opts.sourceRef,
+      });
+      console.log(`wrote ${result.tokensPath}`);
+      console.log(`wrote ${result.lockPath}`);
     });
 
   return program;

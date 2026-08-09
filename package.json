@@ -22,6 +22,8 @@
     "@types/node": "^22.0.0",
     "loom-cli": "workspace:*",
     "loom-emit-react": "workspace:*",
-    "loom-emit-angular": "workspace:*"
+    "loom-emit-angular": "workspace:*",
+    "loom-emit-styles": "workspace:*",
+    "loom-tokens-import-figma": "workspace:*"
   }
 }

@@ -3,6 +3,7 @@ name: checkbox
 kind: primitive
 category: form
 extends: [interactive-base]
+tokens: design-tokens.json
 ---
 
 ## Intent
@@ -122,3 +123,44 @@ pattern: checkbox
 ```
 
 Conforms to the WAI-ARIA APG checkbox pattern.
+
+## Style
+
+### root-background
+
+```yaml
+kind: token-ref
+part: root
+property: background-color
+token: color.surface.default
+```
+
+The checkbox's own background surface, bound to a design token rather than
+a literal value so every framework target stays in sync with the source
+design file.
+
+### root-layout
+
+```yaml
+kind: layout-intent
+part: root
+display: flex
+direction: row
+align: center
+gapToken: spacing.sm
+```
+
+Lays the checkbox control out as a row with the design's standard small
+gap — the minimal flex intent this taxonomy expresses, not a CSS
+reimplementation.
+
+### matches-figma
+
+```yaml
+kind: visual-conformance
+reference: figma://frame/checkbox-default
+```
+
+The rendered checkbox is diffed against this Figma reference frame — the
+`(visual)` / Chromatic row the architecture always reserved a place for
+but never implemented until the Style taxonomy existed to name it.

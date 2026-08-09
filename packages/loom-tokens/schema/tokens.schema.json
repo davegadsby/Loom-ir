@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loom-ir.dev/schema/tokens.schema.json",
+  "title": "Design tokens (W3C DTCG-conformant)",
+  "description": "A tool-agnostic design tokens file. Whatever design tool produced it (Figma, Penpot, Tokens Studio, ...), only its importer needs to know that — everything downstream only ever sees this shape.",
+  "$ref": "#/$defs/group",
+  "$defs": {
+    "leaf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["$value", "$type"],
+      "properties": {
+        "$value": { "type": ["string", "number"] },
+        "$type": { "type": "string", "enum": ["color", "dimension", "number", "string"] },
+        "$description": { "type": "string" }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [{ "$ref": "#/$defs/leaf" }, { "$ref": "#/$defs/group" }]
+      }
+    }
+  }
+}

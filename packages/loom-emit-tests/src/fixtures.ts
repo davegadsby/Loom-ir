@@ -93,7 +93,34 @@ export function makeFixture(): ComponentNode {
         description: "Uses a visually-hidden label instead of aria-label.",
       },
     ],
+    style: [],
     prose: [],
   };
+  return component;
+}
+
+/** `makeFixture` plus two token-ref nodes on different parts, for exercising the style test backend. */
+export function makeStyledFixture(): ComponentNode {
+  const component = makeFixture();
+  component.style = [
+    {
+      id: "widget/style/root-background",
+      kind: "token-ref",
+      origin: "own",
+      assertable: true,
+      part: "root",
+      property: "background-color",
+      token: "color.surface.default",
+    },
+    {
+      id: "widget/style/root-padding",
+      kind: "token-ref",
+      origin: "own",
+      assertable: true,
+      part: "root",
+      property: "padding",
+      token: "spacing.md",
+    },
+  ];
   return component;
 }

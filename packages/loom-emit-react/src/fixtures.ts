@@ -78,7 +78,43 @@ export function makeFixture(): ComponentNode {
         pattern: "checkbox",
       },
     ],
+    style: [],
     prose: [],
   };
+  return component;
+}
+
+/** `makeFixture` plus a token-ref/layout-intent on root and a token-ref on the `helper-text` slot. */
+export function makeStyledFixture(): ComponentNode {
+  const component = makeFixture();
+  component.style = [
+    {
+      id: "checkbox/style/root-background",
+      kind: "token-ref",
+      origin: "own",
+      assertable: true,
+      part: "root",
+      property: "background-color",
+      token: "color.surface.default",
+    },
+    {
+      id: "checkbox/style/root-layout",
+      kind: "layout-intent",
+      origin: "own",
+      assertable: true,
+      part: "root",
+      display: "flex",
+      gapToken: "spacing.sm",
+    },
+    {
+      id: "checkbox/style/helper-text-color",
+      kind: "token-ref",
+      origin: "own",
+      assertable: true,
+      part: "helper-text",
+      property: "color",
+      token: "color.surface.disabled",
+    },
+  ];
   return component;
 }

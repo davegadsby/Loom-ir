@@ -10,7 +10,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "loom-ir": "workspace:*"
+    "loom-ir": "workspace:*",
+    "loom-emit-styles": "workspace:*"
   },
   "devDependencies": {
     "loom-expr": "workspace:*"

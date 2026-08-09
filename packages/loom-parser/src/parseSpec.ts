@@ -12,6 +12,7 @@ import {
   type ProseNode,
   type RuleNode,
   type StateNode,
+  type StyleNode,
   type TransitionNode,
   type Trigger,
   type VerifyRoute,
@@ -84,6 +85,8 @@ export function parseSpec(source: string, options: ParseSpecOptions = {}): Compo
 
   const a11y: A11yNode[] = (byHeading.get("a11y")?.blocks ?? []).map((block) => buildA11yNode(componentSlug, block));
 
+  const style: StyleNode[] = (byHeading.get("style")?.blocks ?? []).map((block) => buildStyleNode(componentSlug, block));
+
   let component: ComponentNode = {
     id: componentSlug,
     kind: "component",
@@ -98,6 +101,7 @@ export function parseSpec(source: string, options: ParseSpecOptions = {}): Compo
     rules,
     claims,
     a11y,
+    style,
     prose,
   };
 
@@ -265,5 +269,46 @@ function buildA11yNode(componentSlug: string, block: RawNodeBlock): A11yNode {
       };
     default:
       throw new Error(`node '${block.slug}' in A11y has unexpected kind '${String(yaml.kind)}'`);
+  }
+}
+
+function buildStyleNode(componentSlug: string, block: RawNodeBlock): StyleNode {
+  const yaml = requireYaml(block);
+  const id = computeNodeId(componentSlug, "style", block.slug);
+  switch (yaml.kind) {
+    case "token-ref":
+      return {
+        id,
+        origin: "own",
+        assertable: true,
+        kind: "token-ref",
+        part: yaml.part as string,
+        property: yaml.property as string,
+        token: yaml.token as string,
+      };
+    case "layout-intent":
+      return {
+        id,
+        origin: "own",
+        assertable: true,
+        kind: "layout-intent",
+        part: yaml.part as string,
+        display: yaml.display as "flex" | "grid",
+        direction: yaml.direction as "row" | "column" | undefined,
+        gapToken: yaml.gapToken as string | undefined,
+        align: yaml.align as string | undefined,
+        justify: yaml.justify as string | undefined,
+      };
+    case "visual-conformance":
+      return {
+        id,
+        origin: "own",
+        assertable: true,
+        kind: "visual-conformance",
+        verify: asVerify(yaml.verify, "visual"),
+        reference: yaml.reference as string,
+      };
+    default:
+      throw new Error(`node '${block.slug}' in Style has unexpected kind '${String(yaml.kind)}'`);
   }
 }

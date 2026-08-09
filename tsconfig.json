@@ -2,6 +2,8 @@
   "files": [],
   "references": [
     { "path": "packages/loom-expr" },
+    { "path": "packages/loom-tokens" },
+    { "path": "packages/loom-tokens-import-figma" },
     { "path": "packages/loom-ir" },
     { "path": "packages/loom-schema" },
     { "path": "packages/loom-parser" },
