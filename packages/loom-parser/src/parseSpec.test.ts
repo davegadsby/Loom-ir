@@ -236,6 +236,146 @@ reference: figma://frame/123
   });
 });
 
+describe("parseSpec — Composition section", () => {
+  const leafSpec = `---
+name: leaf
+kind: primitive
+---
+
+## Declarations
+
+### variant
+
+\`\`\`yaml
+kind: prop
+type: string
+default: primary
+\`\`\`
+
+### default
+
+\`\`\`yaml
+kind: slot
+\`\`\`
+
+### press
+
+\`\`\`yaml
+kind: event
+payloadType: "record{}"
+\`\`\`
+`;
+
+  function parseLeaf(): ComponentNode {
+    return parseSpec(leafSpec);
+  }
+
+  const compositeSpec = `---
+name: widget
+kind: composite
+---
+
+## Declarations
+
+### open
+
+\`\`\`yaml
+kind: prop
+type: bool
+default: false
+\`\`\`
+
+### closed
+
+\`\`\`yaml
+kind: event
+payloadType: "record{}"
+\`\`\`
+
+## Composition
+
+### root-node
+
+\`\`\`yaml
+kind: uses
+component: leaf
+root: true
+visibleWhen: open
+props:
+  variant: danger
+slotContent:
+  default:
+    text: "Confirm"
+on:
+  press: closed
+\`\`\`
+`;
+
+  function parseComposite(): ComponentNode {
+    const leaf = parseLeaf();
+    return parseSpec(compositeSpec, {
+      resolveComponent: (ref) => {
+        if (ref === "leaf") return leaf;
+        throw new Error(`unknown component '${ref}'`);
+      },
+    });
+  }
+
+  it("parses a uses node with props, slotContent, on, and visibleWhen", () => {
+    const widget = parseComposite();
+    expect(widget.composition).toHaveLength(1);
+    const node = widget.composition[0]!;
+    expect(node).toMatchObject({
+      kind: "uses",
+      name: "root-node",
+      component: "leaf",
+      root: true,
+      visibleWhen: "open",
+      props: { variant: "danger" },
+      slotContent: { default: { text: "Confirm" } },
+      on: { press: "closed" },
+      assertable: false,
+    });
+    expect(node.resolvedComponent.name).toBe("leaf");
+    expect(node.id).toBe("widget/composition/root-node");
+  });
+
+  it("throws when Composition is present but no resolveComponent is supplied", () => {
+    expect(() => parseSpec(compositeSpec)).toThrow(/resolveComponent/);
+  });
+
+  it("throws when Composition is present but frontmatter.kind isn't 'composite'", () => {
+    const primitiveWithComposition = compositeSpec.replace("kind: composite", "kind: primitive");
+    const leaf = parseLeaf();
+    expect(() =>
+      parseSpec(primitiveWithComposition, { resolveComponent: () => leaf })
+    ).toThrow(/frontmatter.kind is 'primitive', expected 'composite'/);
+  });
+
+  it("throws when an extends base itself declares a Composition section", () => {
+    const leaf = parseLeaf();
+    const baseWithComposition = parseSpec(compositeSpec, { resolveComponent: () => leaf });
+    const childExtendingComposite = `---
+name: child-of-composite
+kind: composite
+extends: [widget]
+---
+
+## Intent
+
+Irrelevant.
+`;
+    expect(() =>
+      parseSpec(childExtendingComposite, {
+        resolveBase: (ref) => {
+          if (ref === "widget") return baseWithComposition;
+          throw new Error(`unknown base '${ref}'`);
+        },
+      })
+    ).toThrow(/extends \[widget\] which declare their own Composition/);
+  });
+});
+
 describe("parseSpec — error handling", () => {
   it("throws when extends is present but no resolveBase is supplied", () => {
     expect(() => parseSpec(readExample("checkbox.md"))).toThrow(/resolveBase/);

@@ -4,10 +4,13 @@ import { validateFrontmatter, validateNodeBlock } from "loom-schema";
 import {
   computeNodeId,
   checkPath,
+  checkComposition,
   type A11yNode,
   type ClaimNode,
   type ComponentNode,
+  type CompositionNode,
   type DeclarationNode,
+  type EventNode,
   type GuardNode,
   type ProseNode,
   type RuleNode,
@@ -15,6 +18,7 @@ import {
   type StyleNode,
   type TransitionNode,
   type Trigger,
+  type UsesNode,
   type VerifyRoute,
 } from "loom-ir";
 import { parseDomain, parseExpr } from "loom-expr";
@@ -30,6 +34,15 @@ const matter = require("gray-matter") as typeof matterFn;
 export interface ParseSpecOptions {
   /** Resolves a base spec named in `extends` to its already-parsed (and itself already-flattened) tree. */
   resolveBase?: (ref: string) => ComponentNode;
+  /**
+   * Resolves a `uses.component` ref to its already-parsed (and, if it has its
+   * own `extends`, already-flattened) tree. Never flattened into the
+   * referencer — kept as a distinct nested tree (see loom-ir's composition.ts
+   * and both component emitters). A distinct option from `resolveBase` even
+   * though callers typically wire the same underlying resolver to both, so
+   * this file stays honest about which refs get flattened vs. embedded whole.
+   */
+  resolveComponent?: (ref: string) => ComponentNode;
 }
 
 export function parseSpec(source: string, options: ParseSpecOptions = {}): ComponentNode {
@@ -87,6 +100,10 @@ export function parseSpec(source: string, options: ParseSpecOptions = {}): Compo
 
   const style: StyleNode[] = (byHeading.get("style")?.blocks ?? []).map((block) => buildStyleNode(componentSlug, block));
 
+  const composition: CompositionNode[] = (byHeading.get("composition")?.blocks ?? []).map((block) =>
+    buildCompositionNode(componentSlug, block, options)
+  );
+
   let component: ComponentNode = {
     id: componentSlug,
     kind: "component",
@@ -102,6 +119,7 @@ export function parseSpec(source: string, options: ParseSpecOptions = {}): Compo
     claims,
     a11y,
     style,
+    composition,
     prose,
   };
 
@@ -112,12 +130,26 @@ export function parseSpec(source: string, options: ParseSpecOptions = {}): Compo
       );
     }
     const bases = component.extends.map((ref) => options.resolveBase!(ref));
+    const basesWithComposition = component.extends.filter((ref, i) => bases[i]!.composition.length > 0);
+    if (basesWithComposition.length > 0) {
+      throw new Error(
+        `spec '${componentSlug}' extends [${basesWithComposition.join(", ")}] which declare their own Composition — extends+composition on a base is unsupported (flattenInheritance never merges the composition field, so a base's composition nodes would be silently discarded)`
+      );
+    }
     component = flattenInheritance(component, bases);
+  }
+
+  if (component.composition.length > 0 && frontmatter.kind !== "composite") {
+    throw new Error(
+      `spec '${componentSlug}' has a Composition section but frontmatter.kind is '${frontmatter.kind}', expected 'composite'`
+    );
   }
 
   for (const claim of component.claims) {
     if (claim.kind === "path") checkPath(claim, component.transitions);
   }
+
+  checkComposition(component);
 
   return component;
 }
@@ -145,7 +177,13 @@ function buildDeclarationNode(componentSlug: string, block: RawNodeBlock): Decla
         defaultValue: yaml.default as never,
       };
     case "event":
-      return { ...envelope, kind: "event", name: block.slug, payloadType: parseTypeText(yaml.payloadType as string) };
+      return {
+        ...envelope,
+        kind: "event",
+        name: block.slug,
+        payloadType: parseTypeText(yaml.payloadType as string),
+        firesWhen: yaml.firesWhen as EventNode["firesWhen"],
+      };
     case "slot":
       return { ...envelope, kind: "slot", name: block.slug };
     case "method": {
@@ -311,4 +349,29 @@ function buildStyleNode(componentSlug: string, block: RawNodeBlock): StyleNode {
     default:
       throw new Error(`node '${block.slug}' in Style has unexpected kind '${String(yaml.kind)}'`);
   }
+}
+
+function buildCompositionNode(componentSlug: string, block: RawNodeBlock, options: ParseSpecOptions): UsesNode {
+  const yaml = requireYaml(block);
+  if (yaml.kind !== "uses") {
+    throw new Error(`node '${block.slug}' in Composition has unexpected kind '${String(yaml.kind)}'`);
+  }
+  const ref = yaml.component as string;
+  if (!options.resolveComponent) {
+    throw new Error(`spec '${componentSlug}' has a Composition node referencing '${ref}' but no resolveComponent was provided`);
+  }
+  return {
+    id: computeNodeId(componentSlug, "composition", block.slug),
+    origin: "own",
+    assertable: false,
+    kind: "uses",
+    name: block.slug,
+    component: ref,
+    resolvedComponent: options.resolveComponent(ref),
+    root: yaml.root as boolean | undefined,
+    props: yaml.props as UsesNode["props"],
+    slotContent: yaml.slotContent as UsesNode["slotContent"],
+    on: yaml.on as Record<string, string> | undefined,
+    visibleWhen: yaml.visibleWhen as string | undefined,
+  };
 }

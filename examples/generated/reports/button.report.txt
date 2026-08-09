@@ -1,0 +1,14 @@
+$ loom report examples/specs/button.md --results examples/loom.results.json
+
+not-applicable component            button
+not-applicable prop                 interactive-base/declarations/disabled
+not-applicable prop                 button/declarations/variant
+not-applicable slot                 button/declarations/default
+not-applicable event                button/declarations/press
+confirmed      property             interactive-base/claims/disabled-not-focusable
+unverifiable   unexpressible        button/claims/variants-read-as-visually-distinct
+unverified     pattern-conformance  button/a11y/button-pattern
+unverified     token-ref            button/style/root-background
+unknown        layout-intent        button/style/root-layout
+not-applicable intent               button/prose/intent
+not-applicable rationale            button/prose/rationale

@@ -39,7 +39,7 @@ const cliBin = join(repoRoot, "packages", "loom-cli", "dist", "bin.js");
 
 // Real standalone components only — interactive-base is a mixin spec, not
 // something anyone compiles to a component on its own.
-const components = ["checkbox", "disclosure"];
+const components = ["checkbox", "disclosure", "button", "dialog", "confirmation-dialog"];
 
 const figmaResponse: FigmaVariablesResponse = JSON.parse(
   readFileSync(join(here, "figma-variables-fixture.json"), "utf8")
@@ -91,8 +91,8 @@ for (const name of components) {
   writeFileSync(join(reportsDir, `${name}.validate.txt`), runCli(["validate", specPath, "--results", resultsLedger]), "utf8");
 }
 
-// checkbox is the only component with a Style section — this is the one
-// place `--tokens`/`--lock` actually have something to check.
+// checkbox is enough to demonstrate `--tokens`/`--lock` — not repeated for
+// every styled component.
 writeFileSync(
   join(reportsDir, "checkbox.validate-tokens.txt"),
   runCli([

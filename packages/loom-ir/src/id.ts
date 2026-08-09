@@ -1,7 +1,7 @@
 import type { NodeId } from "./envelope.js";
 
 /** The taxonomy groups a node's structural path can sit under (§5.3). */
-export type SectionKind = "declarations" | "machine" | "claims" | "a11y" | "style" | "prose";
+export type SectionKind = "declarations" | "machine" | "claims" | "a11y" | "style" | "composition" | "prose";
 
 const SLUG_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 

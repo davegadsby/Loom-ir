@@ -1,0 +1,5 @@
+$ loom validate examples/specs/button.md --results examples/loom.results.json
+
+emission coverage:    60.0% (3/5)
+result coverage:      33.3% (1/3)
+expressibility ratio: 80.0% (4/5)

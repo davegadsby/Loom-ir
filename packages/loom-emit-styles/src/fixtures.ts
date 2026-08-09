@@ -79,6 +79,7 @@ export function makeStyledCheckboxFixture(): ComponentNode {
         token: "color.surface.disabled",
       },
     ],
+    composition: [],
     prose: [],
   };
 }

@@ -1,0 +1,11 @@
+$ loom report examples/specs/confirmation-dialog.md --results examples/loom.results.json
+
+not-applicable component            confirmation-dialog
+not-applicable prop                 confirmation-dialog/declarations/open
+not-applicable event                confirmation-dialog/declarations/opened
+not-applicable event                confirmation-dialog/declarations/closed
+unverifiable   unexpressible        confirmation-dialog/claims/confirm-closes-the-dialog
+not-applicable uses                 confirmation-dialog/composition/dialog-instance
+not-applicable uses                 confirmation-dialog/composition/confirm-button
+not-applicable intent               confirmation-dialog/prose/intent
+not-applicable rationale            confirmation-dialog/prose/rationale

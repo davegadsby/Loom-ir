@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitReact } from "./emitReact.js";
-import { makeFixture, makeStyledFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture, makeCompositionFixture } from "./fixtures.js";
 
 describe("emitReact", () => {
   it("emits one PascalCase-named file per component", () => {
@@ -29,9 +29,9 @@ describe("emitReact", () => {
     expect(file!.contents).toContain("helperText?: React.ReactNode;");
     expect(file!.contents).toContain("checkbox/declarations/helper-text");
     expect(file!.contents).toContain('<div data-loom-slot="helper-text">{helperText}</div>');
-    // both slots destructured together, alongside the props, in declaration order
+    // props, then slots, then event callbacks — all destructured together, in that order
     expect(file!.contents).toContain(
-      "const { disabled = false, checked = false, children, helperText } = props;"
+      "const { disabled = false, checked = false, children, helperText, onChange } = props;"
     );
   });
 
@@ -100,5 +100,40 @@ describe("emitReact", () => {
     const [file] = emitReact(makeFixture());
     expect(file!.contents).not.toContain(".css");
     expect(file!.contents).not.toContain("className");
+  });
+});
+
+describe("emitReact — composition", () => {
+  it("imports each distinct referenced component", () => {
+    const [file] = emitReact(makeCompositionFixture());
+    expect(file!.contents).toContain('import { Dialog } from "./Dialog";');
+    expect(file!.contents).toContain('import { Button } from "./Button";');
+  });
+
+  it("recursively renders the composition tree: root wrapped in visibleWhen, slot content as attributes, on wired to a callback", () => {
+    const [file] = emitReact(makeCompositionFixture());
+    expect(file!.contents).toContain("{open && (");
+    expect(file!.contents).toContain('<Dialog title={"Confirm Deletion"} actions={<><Button');
+    expect(file!.contents).toContain('variant={"primary"}');
+    expect(file!.contents).toContain('onPress={() => onClosed?.({})}');
+    expect(file!.contents).toContain('{"Confirm"}</Button></>} />');
+  });
+
+  it("destructures event callback props so on-wiring and firesWhen can call them", () => {
+    const [file] = emitReact(makeCompositionFixture());
+    expect(file!.contents).toContain("const { open = false, onOpened, onClosed } = props;");
+  });
+
+  it("fires a firesWhen event via a useRef/useEffect pair that skips the initial mount", () => {
+    const [file] = emitReact(makeCompositionFixture());
+    expect(file!.contents).toContain("const __prevOpen = React.useRef(open);");
+    expect(file!.contents).toContain("React.useEffect(() => {");
+    expect(file!.contents).toContain("if (__prevOpen.current !== open && open === true) onOpened?.({});");
+    expect(file!.contents).toContain("__prevOpen.current = open;");
+  });
+
+  it("does not render the per-slot loop when a root composition node is present", () => {
+    const [file] = emitReact(makeCompositionFixture());
+    expect(file!.contents).not.toContain("data-loom-slot");
   });
 });

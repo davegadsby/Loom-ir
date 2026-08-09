@@ -25,6 +25,8 @@ export type {
   LayoutIntentNode,
   VisualConformanceNode,
   StyleNode,
+  UsesNode,
+  CompositionNode,
   IntentNode,
   RationaleNode,
   ProseNode,
@@ -39,3 +41,4 @@ export type { SectionKind } from "./id.js";
 export { visit, reduce, findById, allNodes, children } from "./visit.js";
 
 export { checkPath, PathCheckError } from "./paths.js";
+export { checkComposition, CompositionCheckError } from "./composition.js";

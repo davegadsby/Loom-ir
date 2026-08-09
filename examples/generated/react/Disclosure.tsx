@@ -40,7 +40,7 @@ export interface DisclosureProps {
 }
 
 export function Disclosure(props: DisclosureProps): React.ReactElement {
-  const { disabled = false, expanded = false, trigger, panel } = props;
+  const { disabled = false, expanded = false, trigger, panel, onToggle } = props;
   const [state, setState] = React.useState<string>(__machine.initialState);
 
   const dispatch = (eventName: string) => {
