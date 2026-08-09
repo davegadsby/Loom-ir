@@ -1,0 +1,10 @@
+$ loom report examples/specs/dialog.md --results examples/loom.results.json
+
+not-applicable component            dialog
+not-applicable slot                 dialog/declarations/title
+not-applicable slot                 dialog/declarations/body
+not-applicable slot                 dialog/declarations/actions
+unverifiable   unexpressible        dialog/claims/reads-as-a-modal-overlay
+unverified     pattern-conformance  dialog/a11y/dialog-pattern
+not-applicable intent               dialog/prose/intent
+not-applicable rationale            dialog/prose/rationale

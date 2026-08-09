@@ -1,4 +1,4 @@
-import type { ComponentNode } from "loom-ir";
+import type { ComponentNode, UsesNode } from "loom-ir";
 
 /** Exercises props, an event, a slot, an unsupported method, and a guarded machine. */
 export function makeFixture(): ComponentNode {
@@ -79,6 +79,7 @@ export function makeFixture(): ComponentNode {
       },
     ],
     style: [],
+    composition: [],
     prose: [],
   };
   return component;
@@ -117,4 +118,124 @@ export function makeStyledFixture(): ComponentNode {
     },
   ];
   return component;
+}
+
+function makeChildComponent(name: string, overrides: Partial<ComponentNode> = {}): ComponentNode {
+  return {
+    id: name,
+    kind: "component",
+    origin: "own",
+    assertable: false,
+    name,
+    extends: [],
+    declarations: [],
+    states: [],
+    transitions: [],
+    guards: [],
+    rules: [],
+    claims: [],
+    a11y: [],
+    style: [],
+    composition: [],
+    prose: [],
+    ...overrides,
+  };
+}
+
+/**
+ * A `widget` composing a `dialog` (root, `visibleWhen: open`, a literal
+ * `title` and a nested `actions` slot) with a leaf `confirm-button` wired to
+ * fire `widget`'s own `closed` event on click — a small stand-in for
+ * `confirmation-dialog`'s real shape, small enough to assert exact output
+ * against. Also exercises `opened`'s `firesWhen`.
+ */
+export function makeCompositionFixture(): ComponentNode {
+  const dialog = makeChildComponent("dialog", {
+    declarations: [
+      { id: "dialog/declarations/title", kind: "slot", origin: "own", assertable: false, name: "title" },
+      { id: "dialog/declarations/actions", kind: "slot", origin: "own", assertable: false, name: "actions" },
+    ],
+  });
+  const button = makeChildComponent("button", {
+    declarations: [
+      {
+        id: "button/declarations/variant",
+        kind: "prop",
+        origin: "own",
+        assertable: false,
+        name: "variant",
+        valueType: { kind: "string" },
+      },
+      { id: "button/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+      {
+        id: "button/declarations/press",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "press",
+        payloadType: { kind: "record", fields: {} },
+      },
+    ],
+  });
+
+  const confirmButton: UsesNode = {
+    id: "widget/composition/confirm-button",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "confirm-button",
+    component: "button",
+    resolvedComponent: button,
+    props: { variant: "primary" },
+    slotContent: { default: { text: "Confirm" } },
+    on: { press: "closed" },
+  };
+
+  const dialogUses: UsesNode = {
+    id: "widget/composition/dialog-instance",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "dialog-instance",
+    component: "dialog",
+    resolvedComponent: dialog,
+    root: true,
+    visibleWhen: "open",
+    slotContent: {
+      title: { text: "Confirm Deletion" },
+      actions: { uses: ["confirm-button"] },
+    },
+  };
+
+  return makeChildComponent("widget", {
+    declarations: [
+      {
+        id: "widget/declarations/open",
+        kind: "prop",
+        origin: "own",
+        assertable: false,
+        name: "open",
+        valueType: { kind: "bool" },
+        defaultValue: false,
+      },
+      {
+        id: "widget/declarations/opened",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "opened",
+        payloadType: { kind: "record", fields: {} },
+        firesWhen: { prop: "open", becomes: true },
+      },
+      {
+        id: "widget/declarations/closed",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "closed",
+        payloadType: { kind: "record", fields: {} },
+      },
+    ],
+    composition: [dialogUses, confirmButton],
+  });
 }

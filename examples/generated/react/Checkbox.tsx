@@ -36,7 +36,7 @@ export interface CheckboxProps {
 }
 
 export function Checkbox(props: CheckboxProps): React.ReactElement {
-  const { disabled = false, checked = false } = props;
+  const { disabled = false, checked = false, onChange } = props;
   const [state, setState] = React.useState<string>(__machine.initialState);
 
   const dispatch = (eventName: string) => {

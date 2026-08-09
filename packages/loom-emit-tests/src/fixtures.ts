@@ -94,6 +94,7 @@ export function makeFixture(): ComponentNode {
       },
     ],
     style: [],
+    composition: [],
     prose: [],
   };
   return component;

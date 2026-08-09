@@ -1,4 +1,4 @@
-import type { ComponentNode, EmittedFile } from "loom-ir";
+import type { ComponentNode, EmittedFile, EventNode, UsesNode } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import { loomTypeToTs } from "./loomTypeToTs.js";
 
@@ -44,6 +44,77 @@ function machineLines(component: ComponentNode): string[] {
   return lines;
 }
 
+/** Every distinct component reached by a composition tree, sorted for deterministic import ordering. */
+function collectReferencedComponents(nodes: readonly UsesNode[]): ComponentNode[] {
+  const seen = new Map<string, ComponentNode>();
+  for (const node of nodes) {
+    if (!seen.has(node.resolvedComponent.name)) seen.set(node.resolvedComponent.name, node.resolvedComponent);
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Static string props single-quote-bind (matching this file's existing convention); other literal types bind their JSON form directly — both valid Angular property-binding expression syntax. */
+function angularBinding(key: string, value: unknown): string {
+  return typeof value === "string" ? `[${key}]="'${value.replace(/'/g, "\\'")}'"` : `[${key}]="${JSON.stringify(value)}"`;
+}
+
+/**
+ * Recursively renders one `UsesNode` (and, through `slotContent.*.uses`, its
+ * nested children) as an Angular template fragment. Unlike React, a
+ * resolved child's named slots are `<ng-content select="[slot=name]">`
+ * projections against light-DOM markup, so slot content becomes
+ * `<div slot="name">...</div>` children — never attributes. `on` wiring
+ * becomes a real Angular output binding targeting the already-generated
+ * `@Output()` member on *this* component.
+ */
+function renderUsesTemplate(node: UsesNode, byName: ReadonlyMap<string, UsesNode>): string {
+  const ref = node.resolvedComponent;
+  const selector = `loom-${ref.name}`;
+  const refSlots = ref.declarations.filter((d) => d.kind === "slot");
+
+  const propAttrs = Object.entries(node.props ?? {}).map(([k, v]) => angularBinding(k, v));
+
+  const body: string[] = [];
+  for (const slot of refSlots) {
+    const content = node.slotContent?.[slot.name];
+    if (!content) continue;
+    const inner =
+      "text" in content
+        ? escapeHtml(content.text)
+        : content.uses.map((n) => renderUsesTemplate(byName.get(n)!, byName)).join("");
+    body.push(slot.name === "default" ? inner : `<div slot="${slot.name}">${inner}</div>`);
+  }
+
+  const onAttrs = Object.entries(node.on ?? {}).map(
+    ([childEventName, ownEventName]) => `(${childEventName})="${ownEventName}.emit($event)"`
+  );
+
+  const attrs = [...propAttrs, ...onAttrs];
+  const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+  return `<${selector}${attrsStr}>${body.join("")}</${selector}>`;
+}
+
+/** `ngOnChanges` body firing every declared event whose `firesWhen` prop transitions to its target value — never on the initial mount. */
+function firesWhenLines(events: readonly EventNode[]): string[] {
+  const withFiresWhen = events.filter((e): e is EventNode & { firesWhen: NonNullable<EventNode["firesWhen"]> } => !!e.firesWhen);
+  if (withFiresWhen.length === 0) return [];
+  const lines = [`  ngOnChanges(changes: SimpleChanges): void {`];
+  for (const event of withFiresWhen) {
+    const { prop, becomes } = event.firesWhen;
+    lines.push(
+      `    if ('${prop}' in changes && !changes['${prop}'].firstChange && changes['${prop}'].currentValue === ${JSON.stringify(becomes)}) {`
+    );
+    lines.push(`      this.${event.name}.emit({});`);
+    lines.push(`    }`);
+  }
+  lines.push(`  }`, ``);
+  return lines;
+}
+
 /**
  * Compiles a `ComponentNode` to a minimal standalone Angular component
  * (§4/§14 step 7 — the second framework target, and the real test of
@@ -61,6 +132,14 @@ function machineLines(component: ComponentNode): string[] {
  * while Angular projects content by CSS selector, so each slot becomes an
  * `<ng-content select="...">` instead — same IR node, the idiomatic
  * mechanism for each framework.
+ *
+ * If the component has a `Composition` section, the root `UsesNode` is
+ * recursively rendered inside the wrapper `<div>` (wrapped in
+ * `<ng-container *ngIf="...">` when `visibleWhen` is set), each distinct
+ * referenced component imported and added to the standalone `imports:`
+ * array (real, current Angular API — a standalone component's template may
+ * only use another standalone component's selector if it's listed there).
+ * `EventNode.firesWhen` is implemented via the `OnChanges` lifecycle hook.
  */
 export function emitAngular(component: ComponentNode): EmittedFile[] {
   const componentName = pascalCase(component.name);
@@ -84,14 +163,23 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   // attach a slot's class to (same DOM-ownership limit the Style scope note
   // in loom-ir/src/nodes.ts already states — this is just where it bites).
   const styledParts = new Set(component.style.filter((n) => n.kind !== "visual-conformance").map((n) => n.part));
+  const rootUses = component.composition.find((n) => n.root);
+  const referencedComponents = collectReferencedComponents(component.composition);
+  const usesNgIf = !!rootUses?.visibleWhen;
+  const hasFiresWhen = events.some((e) => e.firesWhen);
+
+  const coreImports = ["Component", "EventEmitter", "Input", "Output"];
+  if (hasFiresWhen) coreImports.push("OnChanges", "SimpleChanges");
 
   const lines: string[] = [
     `// GENERATED by loom-emit-angular. Do not edit by hand.`,
     unsupported.length > 0
       ? `// Unsupported by this backend: ${unsupported.map((n) => n.id).join(", ")}`
       : undefined,
-    `import { Component, EventEmitter, Input, Output } from "@angular/core";`,
+    `import { ${coreImports.join(", ")} } from "@angular/core";`,
+    usesNgIf ? `import { NgIf } from "@angular/common";` : undefined,
     hasMachine ? `import { LoomMachine, Transition, Guard } from "loom-expr";` : undefined,
+    ...referencedComponents.map((c) => `import { ${pascalCase(c.name)}Component } from "./${pascalCase(c.name)}.component";`),
     ``,
   ].filter((l): l is string => l !== undefined);
 
@@ -113,21 +201,31 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   // `<div slot="name">` markup the consumer provides. The selector-less
   // `<ng-content>` for a "default" slot is emitted last so it only picks up
   // whatever the named selectors didn't already claim.
-  const namedSlots = slots.filter((s) => s.name !== "default");
-  const defaultSlot = slots.find((s) => s.name === "default");
-  const templateBody = [
-    ...namedSlots.map((slot) => `<ng-content select="[slot=${slot.name}]"></ng-content>`),
-    ...(defaultSlot ? ["<ng-content></ng-content>"] : []),
-  ].join("");
+  let templateBody: string;
+  if (rootUses) {
+    const byName = new Map(component.composition.map((n) => [n.name, n] as const));
+    const composed = renderUsesTemplate(rootUses, byName);
+    templateBody = rootUses.visibleWhen ? `<ng-container *ngIf="${rootUses.visibleWhen}">${composed}</ng-container>` : composed;
+  } else {
+    const namedSlots = slots.filter((s) => s.name !== "default");
+    const defaultSlot = slots.find((s) => s.name === "default");
+    templateBody = [
+      ...namedSlots.map((slot) => `<ng-content select="[slot=${slot.name}]"></ng-content>`),
+      ...(defaultSlot ? ["<ng-content></ng-content>"] : []),
+    ].join("");
+  }
   const template = `<div ${attrs.join(" ")}>${templateBody}</div>`;
+
+  const importsArr = [...referencedComponents.map((c) => `${pascalCase(c.name)}Component`), ...(usesNgIf ? ["NgIf"] : [])];
 
   lines.push(`@Component({`);
   lines.push(`  selector: ${JSON.stringify(selector)},`);
   lines.push(`  standalone: true,`);
+  if (importsArr.length > 0) lines.push(`  imports: [${importsArr.join(", ")}],`);
   lines.push(`  template: \`${template}\`,`);
   if (styledParts.size > 0) lines.push(`  styleUrls: [${JSON.stringify(`./${componentName}.css`)}],`);
   lines.push(`})`);
-  lines.push(`export class ${componentName}Component {`);
+  lines.push(`export class ${componentName}Component${hasFiresWhen ? " implements OnChanges" : ""} {`);
 
   for (const prop of props) {
     lines.push(`  /** ${prop.id} */`);
@@ -137,6 +235,8 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     lines.push(`  /** ${event.id} */`);
     lines.push(`  @Output() ${event.name} = new EventEmitter<${loomTypeToTs(event.payloadType)}>();`);
   }
+
+  lines.push(...firesWhenLines(events));
 
   if (hasMachine) {
     lines.push(`  state: string = __machine.initialState;`);

@@ -14,6 +14,7 @@ export function children(node: LoomNode): LoomNode[] {
     ...c.claims,
     ...c.a11y,
     ...c.style,
+    ...c.composition,
     ...c.prose,
   ];
 }

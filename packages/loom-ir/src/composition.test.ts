@@ -1,0 +1,229 @@
+import { describe, expect, it } from "vitest";
+import { checkComposition, CompositionCheckError } from "./composition.js";
+import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode } from "./nodes.js";
+
+function makeChildComponent(overrides: Partial<ComponentNode> = {}): ComponentNode {
+  return {
+    id: "child",
+    kind: "component",
+    origin: "own",
+    assertable: false,
+    name: "child",
+    extends: [],
+    declarations: [],
+    states: [],
+    transitions: [],
+    guards: [],
+    rules: [],
+    claims: [],
+    a11y: [],
+    style: [],
+    composition: [],
+    prose: [],
+    ...overrides,
+  };
+}
+
+const childProp: PropNode = {
+  id: "child/declarations/variant",
+  kind: "prop",
+  origin: "own",
+  assertable: false,
+  name: "variant",
+  valueType: { kind: "string" },
+};
+
+const childSlot: SlotNode = {
+  id: "child/declarations/default",
+  kind: "slot",
+  origin: "own",
+  assertable: false,
+  name: "default",
+};
+
+const childEvent: EventNode = {
+  id: "child/declarations/press",
+  kind: "event",
+  origin: "own",
+  assertable: false,
+  name: "press",
+  payloadType: { kind: "record", fields: {} },
+};
+
+const child = makeChildComponent({ declarations: [childProp, childSlot, childEvent] });
+
+function makeUses(overrides: Partial<UsesNode>): UsesNode {
+  return {
+    id: "widget/composition/instance",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "instance",
+    component: "child",
+    resolvedComponent: child,
+    ...overrides,
+  };
+}
+
+function makeWidget(overrides: Partial<ComponentNode> = {}): ComponentNode {
+  return {
+    id: "widget",
+    kind: "component",
+    origin: "own",
+    assertable: false,
+    name: "widget",
+    extends: [],
+    declarations: [],
+    states: [],
+    transitions: [],
+    guards: [],
+    rules: [],
+    claims: [],
+    a11y: [],
+    style: [],
+    composition: [],
+    prose: [],
+    ...overrides,
+  };
+}
+
+describe("checkComposition", () => {
+  it("does nothing when there is no composition section", () => {
+    expect(() => checkComposition(makeWidget())).not.toThrow();
+  });
+
+  it("accepts a single root node with no claims", () => {
+    const widget = makeWidget({ composition: [makeUses({ root: true })] });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when there is no root node", () => {
+    const widget = makeWidget({ composition: [makeUses({ name: "instance" })] });
+    expect(() => checkComposition(widget)).toThrow(CompositionCheckError);
+    expect(() => checkComposition(widget)).toThrow(/0 root composition nodes/);
+  });
+
+  it("throws when there is more than one root node", () => {
+    const widget = makeWidget({
+      composition: [makeUses({ name: "a", root: true }), makeUses({ name: "b", root: true })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/2 root composition nodes/);
+  });
+
+  it("throws on an orphaned node (not root, not claimed by any slotContent)", () => {
+    const widget = makeWidget({
+      composition: [makeUses({ name: "root-node", root: true }), makeUses({ name: "orphan" })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/is orphaned/);
+  });
+
+  it("throws when a node references an unknown sibling name", () => {
+    const widget = makeWidget({
+      composition: [
+        makeUses({ name: "root-node", root: true, slotContent: { default: { uses: ["missing"] } } }),
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/unknown composition node 'missing'/);
+  });
+
+  it("throws when a node is claimed by more than one parent", () => {
+    const widget = makeWidget({
+      composition: [
+        makeUses({ name: "root-node", root: true, slotContent: { default: { uses: ["leaf"] }, other: { uses: ["leaf"] } } }),
+        makeUses({ name: "leaf" }),
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/claimed by more than one parent/);
+  });
+
+  it("throws on a cycle", () => {
+    const widget = makeWidget({
+      composition: [
+        makeUses({ name: "a", root: true, slotContent: { default: { uses: ["b"] } } }),
+        makeUses({ name: "b", slotContent: { default: { uses: ["a"] } } }),
+      ],
+    });
+    // 'a' claims 'b' and 'b' claims 'a' back — 'a' ends up claimed by 'b', so root-claimed-by-another fires first.
+    expect(() => checkComposition(widget)).toThrow(CompositionCheckError);
+  });
+
+  it("throws when a prop key isn't declared on the referenced component", () => {
+    const widget = makeWidget({
+      composition: [makeUses({ root: true, props: { nonexistent: "x" } })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/sets prop 'nonexistent'/);
+  });
+
+  it("throws when a slotContent key isn't declared on the referenced component", () => {
+    const widget = makeWidget({
+      composition: [makeUses({ root: true, slotContent: { nonexistent: { text: "hi" } } })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/fills slot 'nonexistent'/);
+  });
+
+  it("throws when an 'on' key isn't a declared event on the referenced child", () => {
+    const widget = makeWidget({
+      declarations: [{ id: "widget/declarations/closed", kind: "event", origin: "own", assertable: false, name: "closed", payloadType: { kind: "record", fields: {} } }],
+      composition: [makeUses({ root: true, on: { nonexistent: "closed" } })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/wires event 'nonexistent'/);
+  });
+
+  it("throws when an 'on' value isn't a declared event on this component", () => {
+    const widget = makeWidget({
+      composition: [makeUses({ root: true, on: { press: "nonexistent" } })],
+    });
+    expect(() => checkComposition(widget)).toThrow(/does not declare/);
+  });
+
+  it("accepts a valid 'on' wiring", () => {
+    const widget = makeWidget({
+      declarations: [{ id: "widget/declarations/closed", kind: "event", origin: "own", assertable: false, name: "closed", payloadType: { kind: "record", fields: {} } }],
+      composition: [makeUses({ root: true, on: { press: "closed" } })],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when visibleWhen is set on a non-root node", () => {
+    const widget = makeWidget({
+      declarations: [{ id: "widget/declarations/open", kind: "prop", origin: "own", assertable: false, name: "open", valueType: { kind: "bool" } }],
+      composition: [
+        makeUses({ name: "root-node", root: true, slotContent: { default: { uses: ["leaf"] } } }),
+        makeUses({ name: "leaf", visibleWhen: "open" }),
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/sets visibleWhen but is not the root node/);
+  });
+
+  it("throws when visibleWhen names a prop that isn't a declared bool prop", () => {
+    const widget = makeWidget({ composition: [makeUses({ root: true, visibleWhen: "open" })] });
+    expect(() => checkComposition(widget)).toThrow(/not a declared bool prop/);
+  });
+
+  it("accepts a valid visibleWhen on the root node", () => {
+    const widget = makeWidget({
+      declarations: [{ id: "widget/declarations/open", kind: "prop", origin: "own", assertable: false, name: "open", valueType: { kind: "bool" } }],
+      composition: [makeUses({ root: true, visibleWhen: "open" })],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when EventNode.firesWhen.prop isn't a declared prop, even with no composition section", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/opened", kind: "event", origin: "own", assertable: false, name: "opened", payloadType: { kind: "record", fields: {} }, firesWhen: { prop: "missing", becomes: true } },
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/firesWhen.prop 'missing'/);
+  });
+
+  it("accepts a valid firesWhen", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/open", kind: "prop", origin: "own", assertable: false, name: "open", valueType: { kind: "bool" } },
+        { id: "widget/declarations/opened", kind: "event", origin: "own", assertable: false, name: "opened", payloadType: { kind: "record", fields: {} }, firesWhen: { prop: "open", becomes: true } },
+      ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+});

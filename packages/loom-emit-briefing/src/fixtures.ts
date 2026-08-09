@@ -51,6 +51,7 @@ export function makeFixture(): ComponentNode {
       },
     ],
     style: [],
+    composition: [],
     prose: [
       { id: "checkbox/prose/intent", kind: "intent", origin: "own", assertable: false, text: "Toggles a boolean choice." },
       { id: "checkbox/prose/rationale", kind: "rationale", origin: "own", assertable: false, text: "Modeled as a two-state machine." },

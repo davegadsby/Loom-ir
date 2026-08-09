@@ -8,6 +8,7 @@ import { validateCommand } from "./commands/validate.js";
 import { reportCommand } from "./commands/report.js";
 import { authorCommand } from "./commands/author.js";
 import { tokensImportCommand } from "./commands/tokensImport.js";
+import { loadComponent } from "./loadComponent.js";
 import { writeLedger } from "loom-results";
 import { validateLock, validateTokens, computeContentHash, type DesignTokens } from "loom-tokens";
 
@@ -147,5 +148,19 @@ describe("loom-cli commands", () => {
     );
     const stale = validateCommand(checkboxSpec, { tokens: tokensPath, lock: staleLockPath });
     expect(stale.lockStaleness?.stale).toBe(true);
+  });
+
+  it("loadComponent throws a clear error on an extends cycle instead of a stack overflow", () => {
+    writeFileSync(
+      join(dir, "a.md"),
+      `---\nname: a\nkind: primitive\nextends: [b]\n---\n\n## Intent\n\nA.\n`,
+      "utf8"
+    );
+    writeFileSync(
+      join(dir, "b.md"),
+      `---\nname: b\nkind: primitive\nextends: [a]\n---\n\n## Intent\n\nB.\n`,
+      "utf8"
+    );
+    expect(() => loadComponent(join(dir, "a.md"))).toThrow(/circular spec reference/);
   });
 });

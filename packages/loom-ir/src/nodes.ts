@@ -26,6 +26,8 @@ export interface EventNode extends LoomNodeEnvelope {
   kind: "event";
   name: string;
   payloadType: LoomType;
+  /** Auto-fires this event whenever the named prop's value changes to equal `becomes` (never on initial mount). */
+  firesWhen?: { prop: string; becomes: LoomValue };
 }
 
 export interface SlotNode extends LoomNodeEnvelope {
@@ -174,6 +176,42 @@ export interface VisualConformanceNode extends LoomNodeEnvelope {
 export type StyleNode = TokenRefNode | LayoutIntentNode | VisualConformanceNode;
 
 // ---------------------------------------------------------------------------
+// Composition
+// ---------------------------------------------------------------------------
+
+/**
+ * One embedded instance of another component. `component`/`resolvedComponent`
+ * is resolved once at parse time the same way `extends` refs are, but —
+ * unlike `extends` — never flattened into the referencer: it stays a
+ * distinct, nested tree the emitters recurse into (see composition.ts,
+ * emitReact.ts, emitAngular.ts). Tree shape among sibling `uses` nodes on
+ * the same component is expressed by name-reference through
+ * `slotContent[*].uses`, not by nesting — the same "structural reference by
+ * slug" idiom `TransitionNode.from`/`.to` already uses for states.
+ */
+export interface UsesNode extends LoomNodeEnvelope {
+  kind: "uses";
+  /** This instance's own local name — referenced by other UsesNodes' slotContent.*.uses. */
+  name: string;
+  /** Sibling spec slug to instantiate, resolved like `extends`. */
+  component: SpecRef;
+  /** The already-parsed, already-flattened tree `component` resolved to. Opaque to visit()/children(). */
+  resolvedComponent: ComponentNode;
+  /** Exactly one UsesNode per component must set this — the outermost embedded instance. */
+  root?: boolean;
+  /** Literal prop values passed to the child instance. */
+  props?: Record<string, LoomValue>;
+  /** Per-slot-name literal text or an ordered list of other UsesNode `name`s to nest into that slot. */
+  slotContent?: Record<string, { text: string } | { uses: string[] }>;
+  /** Maps this embedded child instance's declared event name to one of *this* component's own declared event names. */
+  on?: Record<string, string>;
+  /** Root node only: name of a bool prop on this component gating whether the composed subtree renders at all. */
+  visibleWhen?: string;
+}
+
+export type CompositionNode = UsesNode;
+
+// ---------------------------------------------------------------------------
 // Prose (non-assertable, kept per §11.1)
 // ---------------------------------------------------------------------------
 
@@ -205,9 +243,18 @@ export interface ComponentNode extends LoomNodeEnvelope {
   claims: ClaimNode[];
   a11y: A11yNode[];
   style: StyleNode[];
+  composition: CompositionNode[];
   prose: ProseNode[];
 }
 
-export type LoomNode = ComponentNode | DeclarationNode | MachineNode | ClaimNode | A11yNode | StyleNode | ProseNode;
+export type LoomNode =
+  | ComponentNode
+  | DeclarationNode
+  | MachineNode
+  | ClaimNode
+  | A11yNode
+  | StyleNode
+  | CompositionNode
+  | ProseNode;
 
 export type NodeKind = LoomNode["kind"];

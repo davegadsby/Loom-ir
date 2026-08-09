@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitAngular } from "./emitAngular.js";
-import { makeFixture, makeStyledFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture, makeCompositionFixture } from "./fixtures.js";
 
 describe("emitAngular", () => {
   it("emits one *.component.ts file per component", () => {
@@ -100,5 +100,38 @@ describe("emitAngular", () => {
     const [file] = emitAngular(makeFixture());
     expect(file!.contents).not.toContain("styleUrls");
     expect(file!.contents).not.toContain('class="');
+  });
+});
+
+describe("emitAngular — composition", () => {
+  it("imports each distinct referenced component and adds them (plus NgIf) to the standalone imports array", () => {
+    const [file] = emitAngular(makeCompositionFixture());
+    expect(file!.contents).toContain('import { ButtonComponent } from "./Button.component";');
+    expect(file!.contents).toContain('import { DialogComponent } from "./Dialog.component";');
+    expect(file!.contents).toContain('import { NgIf } from "@angular/common";');
+    expect(file!.contents).toContain("imports: [ButtonComponent, DialogComponent, NgIf],");
+  });
+
+  it("recursively renders the composition tree: root wrapped in ngIf, slot content as <div slot>, on wired to a real output binding", () => {
+    const [file] = emitAngular(makeCompositionFixture());
+    expect(file!.contents).toContain(
+      '<ng-container *ngIf="open"><loom-dialog><div slot="title">Confirm Deletion</div>' +
+        '<div slot="actions"><loom-button [variant]="\'primary\'" (press)="closed.emit($event)">Confirm</loom-button></div>' +
+        "</loom-dialog></ng-container>"
+    );
+  });
+
+  it("does not render ng-content projections when a root composition node is present", () => {
+    const [file] = emitAngular(makeCompositionFixture());
+    expect(file!.contents).not.toContain("ng-content");
+  });
+
+  it("fires a firesWhen event via ngOnChanges, guarded against the initial mount", () => {
+    const [file] = emitAngular(makeCompositionFixture());
+    expect(file!.contents).toContain("import { Component, EventEmitter, Input, Output, OnChanges, SimpleChanges } from \"@angular/core\";");
+    expect(file!.contents).toContain("export class WidgetComponent implements OnChanges {");
+    expect(file!.contents).toContain("ngOnChanges(changes: SimpleChanges): void {");
+    expect(file!.contents).toContain("if ('open' in changes && !changes['open'].firstChange && changes['open'].currentValue === true) {");
+    expect(file!.contents).toContain("this.opened.emit({});");
   });
 });

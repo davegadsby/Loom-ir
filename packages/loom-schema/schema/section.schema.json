@@ -21,7 +21,8 @@
     { "$ref": "#/$defs/ariaRelation" },
     { "$ref": "#/$defs/tokenRef" },
     { "$ref": "#/$defs/layoutIntent" },
-    { "$ref": "#/$defs/visualConformance" }
+    { "$ref": "#/$defs/visualConformance" },
+    { "$ref": "#/$defs/uses" }
   ],
   "$defs": {
     "trigger": {
@@ -51,7 +52,17 @@
       "required": ["kind", "payloadType"],
       "properties": {
         "kind": { "const": "event" },
-        "payloadType": { "type": "string" }
+        "payloadType": { "type": "string" },
+        "firesWhen": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prop", "becomes"],
+          "properties": {
+            "prop": { "type": "string" },
+            "becomes": {}
+          },
+          "description": "Auto-fires this event whenever the named prop's value changes to equal `becomes` (never on initial mount)."
+        }
       }
     },
     "slot": {
@@ -215,6 +226,65 @@
         "kind": { "const": "visual-conformance" },
         "reference": { "type": "string", "description": "Path/URL to a reference frame or visual-regression baseline id." },
         "verify": { "type": "string", "enum": ["unit", "interaction", "a11y", "visual"] }
+      }
+    },
+    "uses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "component"],
+      "properties": {
+        "kind": { "const": "uses" },
+        "component": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+          "description": "Sibling spec slug to instantiate — resolved the same way `extends` refs are."
+        },
+        "root": {
+          "type": "boolean",
+          "description": "Exactly one `uses` node per component must set this true — the outermost embedded instance."
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Literal prop values passed to the child instance. Checked against the referenced component's declared props at parse time, not by this schema."
+        },
+        "slotContent": { "$ref": "#/$defs/usesSlotContent" },
+        "on": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Maps this embedded child instance's declared event name to one of this component's own declared event names."
+        },
+        "visibleWhen": {
+          "type": "string",
+          "description": "Root node only: name of a bool prop on this component gating whether the composed subtree renders at all."
+        }
+      }
+    },
+    "usesSlotContent": {
+      "type": "object",
+      "description": "Keyed by slot name on the *referenced* component. Values are checked against that component's declared slots at parse time.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text"],
+            "properties": { "text": { "type": "string" } }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["uses"],
+            "properties": {
+              "uses": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1,
+                "description": "Ordered list of other `uses` node names (siblings in this same component's Composition section) to nest into this slot."
+              }
+            }
+          }
+        ]
       }
     }
   }
