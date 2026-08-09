@@ -49,13 +49,15 @@ describe("emitReact", () => {
     expect(file!.contents).toContain("__machine");
     expect(file!.contents).toContain('onClick={() => dispatch("click")}');
     expect(file!.contents).toContain('"id":"unchecked"');
-    expect(file!.contents).toContain('"id":"toggle-on"');
+    expect(file!.contents).toContain('id: "toggle-on"');
   });
 
-  it("instantiates a typed LoomMachine instead of an any-typed literal, and delegates dispatch to it", () => {
+  it("instantiates a typed LoomMachine, and each Transition/Guard explicitly rather than as nested JSON", () => {
     const [file] = emitReact(makeFixture());
-    expect(file!.contents).toContain('import { LoomMachine } from "loom-expr";');
+    expect(file!.contents).toContain('import { LoomMachine, Transition, Guard } from "loom-expr";');
     expect(file!.contents).toContain("const __machine = new LoomMachine({");
+    expect(file!.contents).toContain("new Transition({");
+    expect(file!.contents).toContain("guard: Guard.from({");
     expect(file!.contents).not.toContain("__machine: any");
     expect(file!.contents).toContain("React.useState<string>(__machine.initialState)");
     expect(file!.contents).toContain("const next = __machine.dispatch(state, eventName, env);");

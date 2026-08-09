@@ -32,7 +32,7 @@ describe("full pipeline integration (checkbox archetype)", () => {
 
     // Same machine data embedded in both — the only thing that changed is
     // framework idiom (JSX vs. decorators/template), not the underlying tree.
-    for (const marker of ['"id":"unchecked"', '"id":"checked"', '"id":"toggle-on"', '"id":"toggle-off"']) {
+    for (const marker of ['"id":"unchecked"', '"id":"checked"', 'id: "toggle-on"', 'id: "toggle-off"']) {
       expect(reactFile!.contents).toContain(marker);
       expect(angularFile!.contents).toContain(marker);
     }

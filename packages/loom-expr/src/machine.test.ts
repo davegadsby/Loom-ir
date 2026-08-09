@@ -22,7 +22,7 @@ describe("Transition", () => {
     from: "unchecked",
     to: "checked",
     trigger: { kind: "event", name: "click" },
-    guard: parseExpr("not disabled"),
+    guard: Guard.from(parseExpr("not disabled")),
   });
 
   it("matches when state, event, and guard all agree", () => {
@@ -68,29 +68,30 @@ const checkboxConfig: MachineConfig = {
     { id: "checked", disabled: false, focusable: true },
   ],
   transitions: [
-    {
+    new Transition({
       id: "toggle-on",
       from: "unchecked",
       to: "checked",
       trigger: { kind: "event", name: "click" },
-      guard: parseExpr("not disabled"),
-    },
-    {
+      guard: Guard.from(parseExpr("not disabled")),
+    }),
+    new Transition({
       id: "toggle-off",
       from: "checked",
       to: "unchecked",
       trigger: { kind: "event", name: "click" },
-      guard: parseExpr("not disabled"),
-    },
+      guard: Guard.from(parseExpr("not disabled")),
+    }),
   ],
 };
 
 describe("LoomMachine", () => {
-  it("is instantiated directly from plain config data", () => {
+  it("is instantiated from a config whose transitions are pre-built Transition instances", () => {
     const machine = new LoomMachine(checkboxConfig);
     expect(machine.states).toHaveLength(2);
     expect(machine.transitions).toHaveLength(2);
     expect(machine.transitions[0]).toBeInstanceOf(Transition);
+    expect(machine.transitions[0]).toBe(checkboxConfig.transitions[0]);
   });
 
   it("initialState is the first configured state's id", () => {
