@@ -1,0 +1,25 @@
+{
+  "name": "loom-cli",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "loom": "dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "loom-ir": "workspace:*",
+    "loom-parser": "workspace:*",
+    "loom-emit-react": "workspace:*",
+    "loom-emit-angular": "workspace:*",
+    "loom-emit-tests": "workspace:*",
+    "loom-results": "workspace:*",
+    "loom-validate": "workspace:*"
+  }
+}

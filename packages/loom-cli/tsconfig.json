@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "references": [
+    { "path": "../loom-ir" },
+    { "path": "../loom-parser" },
+    { "path": "../loom-emit-react" },
+    { "path": "../loom-emit-angular" },
+    { "path": "../loom-emit-tests" },
+    { "path": "../loom-results" },
+    { "path": "../loom-validate" }
+  ],
+  "include": ["src"]
+}

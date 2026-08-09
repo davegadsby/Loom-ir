@@ -1,0 +1,11 @@
+export { buildProgram } from "./cli.js";
+export { loadComponent, makeFileResolveBase } from "./loadComponent.js";
+export { emitAllTests } from "./emitAllTests.js";
+export { compileCommand, writeFiles } from "./commands/compile.js";
+export type { CompileOptions, CompileTarget } from "./commands/compile.js";
+export { validateCommand } from "./commands/validate.js";
+export type { ValidateOptions, ValidateOutcome } from "./commands/validate.js";
+export { reportCommand } from "./commands/report.js";
+export type { ReportOptions } from "./commands/report.js";
+export { authorCommand } from "./commands/author.js";
+export type { AuthorOptions } from "./commands/author.js";

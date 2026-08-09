@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loom-ir.dev/schema/section.schema.json",
+  "title": "Loom spec node block",
+  "description": "Shape of the fenced ```yaml block under a spec's ### sub-heading. The heading text is the node's slug; prose below the fence becomes the node's description/claim text. `kind` selects which of the §5.3 taxonomy node shapes applies.",
+  "oneOf": [
+    { "$ref": "#/$defs/prop" },
+    { "$ref": "#/$defs/event" },
+    { "$ref": "#/$defs/slot" },
+    { "$ref": "#/$defs/method" },
+    { "$ref": "#/$defs/state" },
+    { "$ref": "#/$defs/transition" },
+    { "$ref": "#/$defs/guard" },
+    { "$ref": "#/$defs/rule" },
+    { "$ref": "#/$defs/invariant" },
+    { "$ref": "#/$defs/property" },
+    { "$ref": "#/$defs/path" },
+    { "$ref": "#/$defs/unexpressible" },
+    { "$ref": "#/$defs/patternConformance" },
+    { "$ref": "#/$defs/delta" },
+    { "$ref": "#/$defs/ariaRelation" }
+  ],
+  "$defs": {
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["key", "event", "pointer"] },
+        "key": { "type": "string" },
+        "context": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "prop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "type"],
+      "properties": {
+        "kind": { "const": "prop" },
+        "type": { "type": "string", "description": "Type-text, e.g. 'bool', 'list<string>'." },
+        "default": {}
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "payloadType"],
+      "properties": {
+        "kind": { "const": "event" },
+        "payloadType": { "type": "string" }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": { "kind": { "const": "slot" } }
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "returnType"],
+      "properties": {
+        "kind": { "const": "method" },
+        "params": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": { "name": { "type": "string" }, "type": { "type": "string" } }
+          }
+        },
+        "returnType": { "type": "string" }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "state" },
+        "flags": { "type": "object", "additionalProperties": { "type": "boolean" } }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to", "trigger"],
+      "properties": {
+        "kind": { "const": "transition" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "trigger": { "$ref": "#/$defs/trigger" },
+        "guard": { "type": "string", "description": "Expression-language text (§6.4)." }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "predicate"],
+      "properties": {
+        "kind": { "const": "guard" },
+        "predicate": { "type": "string" }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "condition", "outcome"],
+      "properties": {
+        "kind": { "const": "rule" },
+        "condition": { "type": "string" },
+        "outcome": { "type": "string" }
+      }
+    },
+    "invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "predicate"],
+      "properties": {
+        "kind": { "const": "invariant" },
+        "predicate": { "type": "string" },
+        "verify": { "type": "string", "enum": ["unit", "interaction", "a11y", "visual"] }
+      }
+    },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ident", "domain", "predicate"],
+      "properties": {
+        "kind": { "const": "property" },
+        "ident": { "type": "string" },
+        "domain": { "type": "string", "description": "Domain-language text (§6.5)." },
+        "predicate": { "type": "string" },
+        "verify": { "type": "string", "enum": ["unit", "interaction", "a11y", "visual"] }
+      }
+    },
+    "path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "events", "to"],
+      "properties": {
+        "kind": { "const": "path" },
+        "from": { "type": "string" },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/trigger" } },
+        "to": { "type": "string" },
+        "verify": { "type": "string", "enum": ["unit", "interaction", "a11y", "visual"] }
+      }
+    },
+    "unexpressible": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": { "kind": { "const": "unexpressible" } }
+    },
+    "patternConformance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "pattern"],
+      "properties": {
+        "kind": { "const": "pattern-conformance" },
+        "pattern": { "type": "string", "description": "APG pattern name, e.g. 'checkbox'." },
+        "verify": { "type": "string", "enum": ["unit", "interaction", "a11y", "visual"] }
+      }
+    },
+    "delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": { "kind": { "const": "delta" } }
+    },
+    "ariaRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "relation"],
+      "properties": {
+        "kind": { "const": "aria-relation" },
+        "relation": { "type": "string" }
+      }
+    }
+  }
+}
