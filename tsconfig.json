@@ -1,0 +1,16 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/loom-expr" },
+    { "path": "packages/loom-ir" },
+    { "path": "packages/loom-schema" },
+    { "path": "packages/loom-parser" },
+    { "path": "packages/loom-emit-tests" },
+    { "path": "packages/loom-emit-react" },
+    { "path": "packages/loom-emit-angular" },
+    { "path": "packages/loom-emit-briefing" },
+    { "path": "packages/loom-results" },
+    { "path": "packages/loom-validate" },
+    { "path": "packages/loom-cli" }
+  ]
+}

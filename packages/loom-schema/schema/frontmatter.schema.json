@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loom-ir.dev/schema/frontmatter.schema.json",
+  "title": "Loom spec frontmatter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "kind"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "description": "Component slug, kebab-case. Used as the root of every node id in this spec (§5.5)."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["primitive", "composite", "pattern"],
+      "description": "What archetype of component this spec describes."
+    },
+    "category": {
+      "type": "string",
+      "description": "Free-form grouping, e.g. 'form', 'overlay', 'navigation'."
+    },
+    "extends": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Base spec slugs this component inherits from. Flattened at parse time; origin is retained in each node's envelope (§5.4/§11.2)."
+    }
+  }
+}
