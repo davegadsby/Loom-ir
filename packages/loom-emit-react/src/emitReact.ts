@@ -39,13 +39,13 @@ function machineLiteral(component: ComponentNode): string {
  * Declarations become a typed props interface. A `SlotNode` named
  * `"default"` maps to React's built-in `children`; any other slot becomes
  * its own `React.ReactNode` prop. If the component has a machine, it's
- * embedded as data and driven at runtime through loom-expr's `evaluate` —
- * the same interpreter loom-emit-tests reuses for generated tests — rather
- * than transpiling each guard into bespoke JS. Only a generic `click`
- * interaction is wired up for now (key/pointer triggers are a backend
- * TODO); `MethodNode`s have no React rendering strategy yet and are
- * skipped rather than failing the whole emission (§14 step 5's "skip,
- * don't throw" contract).
+ * instantiated at runtime as a loom-expr `LoomMachine` — the same
+ * interpreter loom-emit-tests reuses for generated tests, now wrapped in a
+ * typed class instead of an untyped literal — rather than transpiling each
+ * guard into bespoke JS. Only a generic `click` interaction is wired up for
+ * now (key/pointer triggers are a backend TODO); `MethodNode`s have no
+ * React rendering strategy yet and are skipped rather than failing the
+ * whole emission (§14 step 5's "skip, don't throw" contract).
  */
 export function emitReact(component: ComponentNode): EmittedFile[] {
   const componentName = pascalCase(component.name);
@@ -67,12 +67,12 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
       ? `// Unsupported by this backend: ${unsupported.map((n) => n.id).join(", ")}`
       : undefined,
     `import * as React from "react";`,
-    component.transitions.length > 0 ? `import { evaluate } from "loom-expr";` : undefined,
+    component.transitions.length > 0 ? `import { LoomMachine } from "loom-expr";` : undefined,
     ``,
   ].filter((l): l is string => l !== undefined);
 
   if (component.transitions.length > 0) {
-    lines.push(`const __machine: any = ${machineLiteral(component)};`, ``);
+    lines.push(`const __machine = new LoomMachine(${machineLiteral(component)});`, ``);
   }
 
   lines.push(`export interface ${componentName}Props {`);
@@ -98,16 +98,12 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   }
 
   if (component.states.length > 0) {
-    lines.push(`  const [state, setState] = React.useState<string>(__machine.states[0]?.id);`);
+    lines.push(`  const [state, setState] = React.useState<string>(__machine.initialState);`);
     lines.push(``);
     lines.push(`  const dispatch = (eventName: string) => {`);
     lines.push(`    const env: any = { ${props.map((p) => p.name).join(", ")} };`);
-    lines.push(`    const transition = __machine.transitions.find(`);
-    lines.push(
-      `      (t: any) => t.from === state && t.trigger?.kind === "event" && t.trigger?.name === eventName && (!t.guard || evaluate(t.guard, env) === true)`
-    );
-    lines.push(`    );`);
-    lines.push(`    if (transition) setState(transition.to);`);
+    lines.push(`    const next = __machine.dispatch(state, eventName, env);`);
+    lines.push(`    if (next) setState(next);`);
     lines.push(`  };`);
     lines.push(``);
   }
