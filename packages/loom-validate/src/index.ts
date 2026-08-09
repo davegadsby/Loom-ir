@@ -4,3 +4,5 @@ export type { CoverageThresholds, GateResult } from "./gate.js";
 export { gate } from "./gate.js";
 export type { CemDriftResult } from "./cemDrift.js";
 export { checkCemDrift } from "./cemDrift.js";
+export type { TokenResolutionIssue, TokensResolveResult, TokensLockStalenessResult } from "./tokens.js";
+export { checkTokensResolve, checkTokensLockStaleness } from "./tokens.js";

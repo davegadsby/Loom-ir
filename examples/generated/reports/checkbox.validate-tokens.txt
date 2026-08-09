@@ -1,0 +1,7 @@
+$ loom validate examples/specs/checkbox.md --results examples/loom.results.json --tokens examples/design-tokens.json --lock examples/figma.lock.json
+
+emission coverage:    62.5% (5/8)
+result coverage:      60.0% (3/5)
+expressibility ratio: 87.5% (7/8)
+tokens resolve:       ok (0 issue(s))
+tokens lock:          fresh

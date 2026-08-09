@@ -1,0 +1,55 @@
+import type { FigmaVariablesResponse } from "./figmaTypes.js";
+
+/** A trimmed, realistically-shaped Figma Variables API response — stands in for a live API call in this sandbox. */
+export function makeFigmaVariablesFixture(): FigmaVariablesResponse {
+  return {
+    status: 200,
+    error: false,
+    meta: {
+      variableCollections: {
+        "VariableCollectionId:1:3": {
+          id: "VariableCollectionId:1:3",
+          name: "Color",
+          defaultModeId: "1:0",
+          variableIds: ["VariableID:1:2", "VariableID:1:4"],
+        },
+        "VariableCollectionId:1:6": {
+          id: "VariableCollectionId:1:6",
+          name: "Spacing",
+          defaultModeId: "1:0",
+          variableIds: ["VariableID:1:5", "VariableID:1:7"],
+        },
+      },
+      variables: {
+        "VariableID:1:2": {
+          id: "VariableID:1:2",
+          name: "color/surface/default",
+          variableCollectionId: "VariableCollectionId:1:3",
+          resolvedType: "COLOR",
+          valuesByMode: { "1:0": { r: 0.9607843137254902, g: 0.9607843137254902, b: 0.9607843137254902, a: 1 } },
+        },
+        "VariableID:1:4": {
+          id: "VariableID:1:4",
+          name: "color/surface/disabled",
+          variableCollectionId: "VariableCollectionId:1:3",
+          resolvedType: "COLOR",
+          valuesByMode: { "1:0": { r: 0.8784313725490196, g: 0.8784313725490196, b: 0.8784313725490196, a: 1 } },
+        },
+        "VariableID:1:5": {
+          id: "VariableID:1:5",
+          name: "spacing/sm",
+          variableCollectionId: "VariableCollectionId:1:6",
+          resolvedType: "FLOAT",
+          valuesByMode: { "1:0": 4 },
+        },
+        "VariableID:1:7": {
+          id: "VariableID:1:7",
+          name: "spacing/md",
+          variableCollectionId: "VariableCollectionId:1:6",
+          resolvedType: "FLOAT",
+          valuesByMode: { "1:0": 8 },
+        },
+      },
+    },
+  };
+}

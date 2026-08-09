@@ -24,6 +24,10 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "Base spec slugs this component inherits from. Flattened at parse time; origin is retained in each node's envelope (§5.4/§11.2)."
+    },
+    "tokens": {
+      "type": "string",
+      "description": "Path to the DTCG design-tokens file this spec's Style section's token-ref/layout-intent nodes were authored against."
     }
   }
 }

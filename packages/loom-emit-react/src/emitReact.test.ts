@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitReact } from "./emitReact.js";
-import { makeFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture } from "./fixtures.js";
 
 describe("emitReact", () => {
   it("emits one PascalCase-named file per component", () => {
@@ -87,5 +87,18 @@ describe("emitReact", () => {
     const [file] = emitReact(fixture);
     expect(file!.contents).not.toContain("__machine");
     expect(file!.contents).not.toContain("dispatch");
+  });
+
+  it("imports the sibling CSS file and adds className to root and a styled non-default slot", () => {
+    const [file] = emitReact(makeStyledFixture());
+    expect(file!.contents).toContain('import "./Checkbox.css";');
+    expect(file!.contents).toContain('className="loom-checkbox"');
+    expect(file!.contents).toContain('<div data-loom-slot="helper-text" className="loom-checkbox__helper-text">{helperText}</div>');
+  });
+
+  it("adds neither a CSS import nor a className when the component has no style nodes", () => {
+    const [file] = emitReact(makeFixture());
+    expect(file!.contents).not.toContain(".css");
+    expect(file!.contents).not.toContain("className");
   });
 });

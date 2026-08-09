@@ -85,6 +85,10 @@ export function flattenInheritance(child: ComponentNode, bases: ComponentNode[])
       groups.map(({ slug, base }) => ({ slug, nodes: base.a11y })),
       child.a11y
     ),
+    style: mergeGroup(
+      groups.map(({ slug, base }) => ({ slug, nodes: base.style })),
+      child.style
+    ),
     prose: mergeGroup(
       groups.map(({ slug, base }) => ({ slug, nodes: base.prose })),
       child.prose

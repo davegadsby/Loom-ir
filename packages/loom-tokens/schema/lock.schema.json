@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loom-ir.dev/schema/lock.schema.json",
+  "title": "Tokens lock file",
+  "description": "Deliberately generic — no field here may name a specific design tool. 'tool' is a free-form label an importer sets (e.g. 'figma'); the core pipeline never branches on it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tool", "sourceRef", "contentHash", "importedAt"],
+  "properties": {
+    "tool": { "type": "string" },
+    "sourceRef": { "type": "string", "description": "Importer-defined pointer back to the design file (a file key, a URL, ...)." },
+    "contentHash": { "type": "string" },
+    "importedAt": { "type": "string" }
+  }
+}

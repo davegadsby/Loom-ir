@@ -65,6 +65,7 @@ export function makeCheckboxFixture(): ComponentNode {
     rules: [],
     claims: [invariant],
     a11y: [],
+    style: [],
     prose: [],
   };
 

@@ -162,6 +162,80 @@ describe("parseSpec — disclosure (extends interactive-base; covers the rest of
   });
 });
 
+describe("parseSpec — Style section", () => {
+  const styleSpec = `---
+name: swatch
+kind: primitive
+tokens: design-tokens.json
+---
+
+## Declarations
+
+### label
+
+\`\`\`yaml
+kind: slot
+\`\`\`
+
+## Style
+
+### root-background
+
+\`\`\`yaml
+kind: token-ref
+part: root
+property: background-color
+token: color.surface.default
+\`\`\`
+
+### root-layout
+
+\`\`\`yaml
+kind: layout-intent
+part: root
+display: flex
+direction: row
+gapToken: spacing.sm
+\`\`\`
+
+### matches-figma
+
+\`\`\`yaml
+kind: visual-conformance
+reference: figma://frame/123
+\`\`\`
+`;
+
+  it("parses a token-ref node", () => {
+    const swatch = parseSpec(styleSpec);
+    const tokenRef = swatch.style.find((n) => n.kind === "token-ref");
+    expect(tokenRef).toMatchObject({
+      part: "root",
+      property: "background-color",
+      token: "color.surface.default",
+      assertable: true,
+    });
+    expect(tokenRef!.id).toBe("swatch/style/root-background");
+  });
+
+  it("parses a layout-intent node with optional fields", () => {
+    const swatch = parseSpec(styleSpec);
+    const layout = swatch.style.find((n) => n.kind === "layout-intent");
+    expect(layout).toMatchObject({ part: "root", display: "flex", direction: "row", gapToken: "spacing.sm" });
+  });
+
+  it("parses a visual-conformance node with the 'visual' verify route", () => {
+    const swatch = parseSpec(styleSpec);
+    const visual = swatch.style.find((n) => n.kind === "visual-conformance");
+    expect(visual).toMatchObject({ reference: "figma://frame/123", verify: "visual", assertable: true });
+  });
+
+  it("reads the frontmatter 'tokens' reference", () => {
+    // frontmatter isn't retained on ComponentNode directly, but parsing must not reject the extra field
+    expect(() => parseSpec(styleSpec)).not.toThrow();
+  });
+});
+
 describe("parseSpec — error handling", () => {
   it("throws when extends is present but no resolveBase is supplied", () => {
     expect(() => parseSpec(readExample("checkbox.md"))).toThrow(/resolveBase/);

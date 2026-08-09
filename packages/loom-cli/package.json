@@ -20,6 +20,11 @@
     "loom-emit-angular": "workspace:*",
     "loom-emit-tests": "workspace:*",
     "loom-results": "workspace:*",
-    "loom-validate": "workspace:*"
+    "loom-validate": "workspace:*",
+    "loom-tokens": "workspace:*",
+    "loom-tokens-import-figma": "workspace:*"
+  },
+  "devDependencies": {
+    "loom-emit-styles": "workspace:*"
   }
 }

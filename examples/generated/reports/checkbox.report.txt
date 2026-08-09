@@ -13,5 +13,8 @@ known-gap      path                 checkbox/claims/click-checks-an-unchecked-bo
 confirmed      property             checkbox/claims/transitions-stay-within-declared-states
 unverifiable   unexpressible        checkbox/claims/touch-latency-feels-instant
 unverified     pattern-conformance  checkbox/a11y/checkbox-pattern
+unverified     token-ref            checkbox/style/root-background
+unknown        layout-intent        checkbox/style/root-layout
+unknown        visual-conformance   checkbox/style/matches-figma
 not-applicable intent               checkbox/prose/intent
 not-applicable rationale            checkbox/prose/rationale

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "loom-ir": "workspace:*",
-    "loom-results": "workspace:*"
+    "loom-results": "workspace:*",
+    "loom-tokens": "workspace:*"
   }
 }

@@ -78,7 +78,34 @@ export function makeFixture(): ComponentNode {
         pattern: "checkbox",
       },
     ],
+    style: [],
     prose: [],
   };
+  return component;
+}
+
+/** `makeFixture` plus a token-ref/layout-intent on root — Angular only ever has a root DOM node it controls. */
+export function makeStyledFixture(): ComponentNode {
+  const component = makeFixture();
+  component.style = [
+    {
+      id: "checkbox/style/root-background",
+      kind: "token-ref",
+      origin: "own",
+      assertable: true,
+      part: "root",
+      property: "background-color",
+      token: "color.surface.default",
+    },
+    {
+      id: "checkbox/style/root-layout",
+      kind: "layout-intent",
+      origin: "own",
+      assertable: true,
+      part: "root",
+      display: "flex",
+      gapToken: "spacing.sm",
+    },
+  ];
   return component;
 }

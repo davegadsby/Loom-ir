@@ -85,12 +85,14 @@ describe("full pipeline integration (checkbox archetype)", () => {
     const result = computeResultCoverage(emittedIds, ledger);
     const expressibility = computeExpressibilityRatio(component);
 
-    // 5 assertable nodes total (3 checkbox claims + 1 inherited property + 1 a11y node), 4 emitted.
-    expect(emission).toEqual({ total: 5, covered: 4, ratio: 0.8 });
-    // Of the 4 emitted, 2 have a recorded result.
-    expect(result).toEqual({ total: 4, covered: 2, ratio: 0.5 });
-    // 4 of 5 assertable claims are machine-verifiable; 1 is UnexpressibleNode.
-    expect(expressibility).toEqual({ total: 5, covered: 4, ratio: 0.8 });
+    // 8 assertable nodes total (3 checkbox claims + 1 inherited property +
+    // 1 a11y node + 3 style nodes), 5 emitted (the 4th style node,
+    // layout-intent, and visual-conformance have no emitted-test backend).
+    expect(emission).toEqual({ total: 8, covered: 5, ratio: 0.625 });
+    // Of the 5 emitted, 2 have a recorded result.
+    expect(result).toEqual({ total: 5, covered: 2, ratio: 0.4 });
+    // 7 of 8 assertable claims are machine-verifiable; 1 is UnexpressibleNode.
+    expect(expressibility).toEqual({ total: 8, covered: 7, ratio: 0.875 });
 
     expect(gate({ emission, result, expressibility }, { expressibility: 0.8 }).passed).toBe(true);
     expect(gate({ emission, result, expressibility }, { result: 0.9 }).passed).toBe(false);

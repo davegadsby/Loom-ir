@@ -7,4 +7,5 @@ export interface Frontmatter {
   kind: "primitive" | "composite" | "pattern";
   category?: string;
   extends?: string[];
+  tokens?: string;
 }

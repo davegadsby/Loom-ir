@@ -9,3 +9,5 @@ export { reportCommand } from "./commands/report.js";
 export type { ReportOptions } from "./commands/report.js";
 export { authorCommand } from "./commands/author.js";
 export type { AuthorOptions } from "./commands/author.js";
+export { tokensImportCommand } from "./commands/tokensImport.js";
+export type { TokensImportOptions, TokensImportResult } from "./commands/tokensImport.js";

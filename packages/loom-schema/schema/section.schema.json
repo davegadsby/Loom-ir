@@ -18,7 +18,10 @@
     { "$ref": "#/$defs/unexpressible" },
     { "$ref": "#/$defs/patternConformance" },
     { "$ref": "#/$defs/delta" },
-    { "$ref": "#/$defs/ariaRelation" }
+    { "$ref": "#/$defs/ariaRelation" },
+    { "$ref": "#/$defs/tokenRef" },
+    { "$ref": "#/$defs/layoutIntent" },
+    { "$ref": "#/$defs/visualConformance" }
   ],
   "$defs": {
     "trigger": {
@@ -177,6 +180,41 @@
       "properties": {
         "kind": { "const": "aria-relation" },
         "relation": { "type": "string" }
+      }
+    },
+    "tokenRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "part", "property", "token"],
+      "properties": {
+        "kind": { "const": "token-ref" },
+        "part": { "type": "string", "description": "\"root\" or an existing slot name." },
+        "property": { "type": "string", "description": "CSS property name, e.g. 'background-color'." },
+        "token": { "type": "string", "description": "Design token path, e.g. 'color.surface.default' — never a raw value." }
+      }
+    },
+    "layoutIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "part", "display"],
+      "properties": {
+        "kind": { "const": "layout-intent" },
+        "part": { "type": "string" },
+        "display": { "type": "string", "enum": ["flex", "grid"] },
+        "direction": { "type": "string", "enum": ["row", "column"] },
+        "gapToken": { "type": "string" },
+        "align": { "type": "string" },
+        "justify": { "type": "string" }
+      }
+    },
+    "visualConformance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reference"],
+      "properties": {
+        "kind": { "const": "visual-conformance" },
+        "reference": { "type": "string", "description": "Path/URL to a reference frame or visual-regression baseline id." },
+        "verify": { "type": "string", "enum": ["unit", "interaction", "a11y", "visual"] }
       }
     }
   }
