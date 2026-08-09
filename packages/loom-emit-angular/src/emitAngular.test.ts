@@ -22,6 +22,14 @@ describe("emitAngular", () => {
     expect(file!.contents).toContain("<ng-content></ng-content>");
   });
 
+  it("renders a selector-based ng-content projection for a named slot, ordered before the default fallback", () => {
+    const [file] = emitAngular(makeFixture());
+    expect(file!.contents).toContain('<ng-content select="[slot=helper-text]"></ng-content>');
+    expect(file!.contents).toContain(
+      '<ng-content select="[slot=helper-text]"></ng-content><ng-content></ng-content>'
+    );
+  });
+
   it("skips MethodNode and logs a warning instead of throwing", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const [file] = emitAngular(makeFixture());

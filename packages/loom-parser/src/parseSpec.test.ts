@@ -23,6 +23,16 @@ function parseCheckbox(): ComponentNode {
   });
 }
 
+function parseDisclosure(): ComponentNode {
+  const base = parseInteractiveBase();
+  return parseSpec(readExample("disclosure.md"), {
+    resolveBase: (ref) => {
+      if (ref === "interactive-base") return base;
+      throw new Error(`unknown base spec '${ref}'`);
+    },
+  });
+}
+
 describe("parseSpec — interactive-base (no inheritance)", () => {
   it("parses frontmatter and declarations", () => {
     const base = parseInteractiveBase();
@@ -102,6 +112,53 @@ describe("parseSpec — checkbox (extends interactive-base)", () => {
     const checkbox = parseCheckbox();
     expect(checkbox.prose.map((p) => p.kind).sort()).toEqual(["intent", "rationale"]);
     expect(checkbox.prose.every((p) => p.assertable === false)).toBe(true);
+  });
+});
+
+describe("parseSpec — disclosure (extends interactive-base; covers the rest of the taxonomy)", () => {
+  it("parses two named slots and an unsupported method declaration", () => {
+    const disclosure = parseDisclosure();
+    const slots = disclosure.declarations.filter((d) => d.kind === "slot");
+    expect(slots.map((s) => s.name).sort()).toEqual(["panel", "trigger"]);
+    const method = disclosure.declarations.find((d) => d.kind === "method");
+    expect(method).toMatchObject({ kind: "method", name: "focus-trigger" });
+  });
+
+  it("parses a standalone GuardNode and RuleNode alongside states/transitions", () => {
+    const disclosure = parseDisclosure();
+    expect(disclosure.guards).toHaveLength(1);
+    expect(disclosure.guards[0]).toMatchObject({ name: "can-toggle" });
+    expect(disclosure.rules).toHaveLength(1);
+    expect(disclosure.rules[0]).toMatchObject({ name: "disabled-locks-collapsed" });
+    expect(disclosure.rules[0]!.condition).toMatchObject({ type: "ref", name: "disabled" });
+  });
+
+  it("parses an InvariantNode", () => {
+    const disclosure = parseDisclosure();
+    const invariant = disclosure.claims.find((c) => c.kind === "invariant");
+    expect(invariant).toMatchObject({ kind: "invariant", verify: "unit" });
+  });
+
+  it("parses a PathNode validated against its own machine at parse time", () => {
+    const disclosure = parseDisclosure();
+    const path = disclosure.claims.find((c) => c.kind === "path");
+    expect(path).toMatchObject({ from: "collapsed", to: "expanded" });
+  });
+
+  it("inherits interactive-base's prop and property claim, same as checkbox does", () => {
+    const disclosure = parseDisclosure();
+    const disabled = disclosure.declarations.find((d) => d.name === "disabled");
+    expect(disabled!.id).toBe("interactive-base/declarations/disabled");
+    expect(disabled!.origin).toEqual({ inheritedFrom: "interactive-base", overridden: false });
+  });
+
+  it("parses DeltaNode and AriaRelationNode a11y nodes", () => {
+    const disclosure = parseDisclosure();
+    expect(disclosure.a11y.map((n) => n.kind).sort()).toEqual(["aria-relation", "delta", "pattern-conformance"]);
+    const relation = disclosure.a11y.find((n) => n.kind === "aria-relation");
+    expect(relation).toMatchObject({ relation: "aria-controls", assertable: false });
+    const delta = disclosure.a11y.find((n) => n.kind === "delta");
+    expect(delta).toMatchObject({ assertable: true, verify: "a11y" });
   });
 });
 

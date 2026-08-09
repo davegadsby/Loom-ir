@@ -1,0 +1,17 @@
+$ loom report examples/specs/checkbox.md --results examples/loom.results.json
+
+not-applicable component            checkbox
+not-applicable prop                 interactive-base/declarations/disabled
+not-applicable prop                 checkbox/declarations/checked
+not-applicable event                checkbox/declarations/change
+not-applicable state                checkbox/machine/unchecked
+not-applicable state                checkbox/machine/checked
+not-applicable transition           checkbox/machine/toggle-on
+not-applicable transition           checkbox/machine/toggle-off
+confirmed      property             interactive-base/claims/disabled-not-focusable
+known-gap      path                 checkbox/claims/click-checks-an-unchecked-box
+confirmed      property             checkbox/claims/transitions-stay-within-declared-states
+unverifiable   unexpressible        checkbox/claims/touch-latency-feels-instant
+unverified     pattern-conformance  checkbox/a11y/checkbox-pattern
+not-applicable intent               checkbox/prose/intent
+not-applicable rationale            checkbox/prose/rationale
