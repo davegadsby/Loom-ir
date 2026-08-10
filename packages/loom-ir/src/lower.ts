@@ -89,7 +89,7 @@ function lowerField(field: FieldNode): RenderNode {
     children.push({ kind: "when", cond, then: [errorSpan] });
   }
 
-  return { kind: "fragment", style: "explicit", children };
+  return { kind: "fragment", children };
 }
 
 /**
@@ -138,16 +138,10 @@ function lowerUsesInstance(
       fills[slot.name] = [{ kind: "text", value: literalExpr(content.text) }];
     } else if ("uses" in content) {
       fills[slot.name] = [
-        {
-          kind: "fragment",
-          style: "shorthand",
-          children: content.uses.map((n) => lowerUsesInstance(byName.get(n)!, byName, fieldsByName)),
-        },
+        { kind: "fragment", children: content.uses.map((n) => lowerUsesInstance(byName.get(n)!, byName, fieldsByName)) },
       ];
     } else {
-      fills[slot.name] = [
-        { kind: "fragment", style: "shorthand", children: content.fields.map((n) => lowerField(fieldsByName.get(n)!)) },
-      ];
+      fills[slot.name] = [{ kind: "fragment", children: content.fields.map((n) => lowerField(fieldsByName.get(n)!)) }];
     }
   }
 

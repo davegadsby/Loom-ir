@@ -15,9 +15,6 @@ import type { NodeId } from "./envelope.js";
  * - `slot` is exercised starting Phase 1b (the non-composition path).
  * - `instance`/`text`/`when`/`fragment` start Phase 1c (composition).
  * - `each` starts the iteration phase.
- * `fragment.style` exists only to hold byte-parity with today's hand-rolled
- * output during the structural refactor; it is deleted once that parity
- * requirement is gone (Phase 1d).
  */
 export type RenderNode =
   | { kind: "element"; tag: string; part?: string; attrs: Attr[]; handlers: Handler[]; children: RenderNode[]; sourceId?: NodeId }
@@ -34,7 +31,7 @@ export type RenderNode =
   | { kind: "slot"; name: string }
   | { kind: "when"; cond: Expr; then: RenderNode[]; else?: RenderNode[] }
   | { kind: "each"; ident: string; over: Expr; key?: Expr; body: RenderNode[] }
-  | { kind: "fragment"; style: "shorthand" | "explicit"; children: RenderNode[] };
+  | { kind: "fragment"; children: RenderNode[] };
 
 export type Attr =
   | { kind: "static"; name: string; value: string }

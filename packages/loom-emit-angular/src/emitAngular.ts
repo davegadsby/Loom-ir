@@ -158,9 +158,8 @@ function printWhen(node: Extract<RenderNode, { kind: "when" }>): string {
  * is always one flat string, so `visibleWhen` (lowered to a root-wrapping
  * `when`) prints through the exact same path as a nested field-error `when`.
  * `slot` doesn't appear in a composition tree (Phase 1b's path is distinct),
- * so it isn't handled here. `fragment.style` is ignored entirely — Angular
- * has no wrapper syntax for either style, unlike React; both print as bare
- * concatenation.
+ * so it isn't handled here. `fragment` prints as bare concatenation — unlike
+ * React, Angular has no fragment-wrapper syntax at all.
  */
 function printInline(node: RenderNode): string {
   switch (node.kind) {

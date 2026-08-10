@@ -133,7 +133,7 @@ describe("lowerComposition — confirmation-dialog shape (instance/fills/when/fo
     if (instance.kind !== "instance") throw new Error("unreachable");
     const actionsFill = instance.fills.actions!;
     expect(actionsFill).toHaveLength(1);
-    expect(actionsFill[0]).toMatchObject({ kind: "fragment", style: "shorthand" });
+    expect(actionsFill[0]).toMatchObject({ kind: "fragment" });
     if (actionsFill[0]!.kind !== "fragment") throw new Error("unreachable");
     expect(actionsFill[0]!.children).toHaveLength(1);
     expect(actionsFill[0]!.children[0]).toMatchObject({ kind: "instance", name: "confirm-button" });
@@ -212,10 +212,10 @@ describe("lowerComposition — login-dialog shape (fields, computed prop, multi-
     if (tree.kind !== "instance") throw new Error("unreachable");
     const bodyFill = tree.fills.body!;
     expect(bodyFill).toHaveLength(1);
-    expect(bodyFill[0]).toMatchObject({ kind: "fragment", style: "shorthand" });
+    expect(bodyFill[0]).toMatchObject({ kind: "fragment" });
     if (bodyFill[0]!.kind !== "fragment") throw new Error("unreachable");
     expect(bodyFill[0]!.children).toHaveLength(1);
-    expect(bodyFill[0]!.children[0]).toMatchObject({ kind: "fragment", style: "explicit" });
+    expect(bodyFill[0]!.children[0]).toMatchObject({ kind: "fragment" });
   });
 
   it("lowers a field to an <input> element plus a when-gated error span, referencing hyphenated touched/valid idents", () => {

@@ -99,7 +99,7 @@ function printInline(node: RenderNode, fieldsByName: ReadonlyMap<string, FieldNo
       return JSON.stringify((node.value as Extract<Expr, { type: "literal" }>).value);
     case "fragment": {
       const inner = node.children.map((c) => printInline(c, fieldsByName)).join("");
-      return node.style === "explicit" ? `<React.Fragment>${inner}</React.Fragment>` : `<>${inner}</>`;
+      return `<>${inner}</>`;
     }
     case "when": {
       const cond = condToJs(node.cond);
