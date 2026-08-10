@@ -103,17 +103,34 @@ on:
 
 ## Claims
 
-### validity-gated-enablement-is-unexpressible
+### invalid-mirrors-the-email-fields-own-validity
 
 ```yaml
-kind: unexpressible
+kind: property
+ident: email
+domain: string
+predicate: 'not (invalid == matches(email, "^[^\s@]+@[^\s@]+\.[^\s@]+$"))'
 ```
 
-`signup-dialog` has no `states`/`transitions` of its own, so the
-`PathNode`/`PropertyNode` claim language (which quantifies over a
-`states`/`transitions` domain) can't yet reference `invalid`, even
-though it's now a named, addressable declaration — the claim language
-reaching the value graph a `derived` value belongs to is a real gap,
-not yet closed. Verifying "Submit only enables once the email is
-valid" end-to-end would need an interaction-level test (Storybook
-play / e2e) outside this taxonomy's current reach.
+The claim language reaching the value graph a `derived` value belongs
+to (Phase 3): `invalid` is no longer just a named declaration nobody
+can check — this samples arbitrary strings for `email`, computes
+`invalid` through the exact same `derived`-value mechanism the emitted
+components use (field validity, then the `derived` expression, closed
+over the sampled value), and asserts it's never equal to whether the
+email matches — i.e. `invalid` is exactly `not matches(...)`, restated
+as `not (invalid == matches(...))` since this grammar's `not` binds
+looser than `==` and can't sit directly on one side of a comparison
+(§ loom-expr `parser.ts`'s precedence chain — `not (A == B)` and
+`A == not B` are the same predicate for booleans either way). It holds
+for *every* string, valid email or not, so — unlike a claim that
+needed to filter down to only valid emails — there's no
+rejection-sampling risk here (§ Risks: "string-validated fields sample
+badly").
+
+Submit's own `disabled` prop is never touched by this claim: `disabled
+= {expr: "invalid"}` is a copy of `invalid`'s value by construction
+(checked structurally by `checkComposition`, not restated here), so
+this claim's real payoff is confirming `invalid` itself computes what
+its name promises — the mechanism a claim would need whenever it wants
+to reference *any* `derived` value by name.

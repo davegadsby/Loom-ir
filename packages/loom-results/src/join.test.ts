@@ -16,6 +16,27 @@ describe("extractEmittedNodeIds", () => {
   it("returns an empty set for files with no bracketed ids", () => {
     expect(extractEmittedNodeIds([{ path: "x.ts", contents: "nothing here" }])).toEqual(new Set());
   });
+
+  it("throws on a bracketed, id-shaped string with the wrong number of segments, rather than silently failing to count it", () => {
+    expect(() =>
+      extractEmittedNodeIds([{ path: "bad.ts", contents: `it("[widget/claims] invariant", () => {});` }])
+    ).toThrow(/well-formed node id/);
+    expect(() =>
+      extractEmittedNodeIds([{ path: "bad.ts", contents: `it("[widget/claims/one/extra] invariant", () => {});` }])
+    ).toThrow(/well-formed node id/);
+  });
+
+  it("does not false-positive on a bracketed JSON array literal containing a slash-bearing string", () => {
+    const files = [
+      {
+        path: "styles.ts",
+        contents: `const __component: any = {"name":"widget","style":[{"id":"widget/style/root-background"}]};`,
+      },
+    ];
+    // The id inside the JSON blob is quoted, not bracketed directly, so it's untouched by
+    // this scan — extractEmittedNodeIds only recognizes the emitters' own `[id]` convention.
+    expect(extractEmittedNodeIds(files)).toEqual(new Set());
+  });
 });
 
 describe("joinResults", () => {

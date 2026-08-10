@@ -50,10 +50,24 @@ export function domainToArbitrary(domain: Domain, ctx: SamplingContext = {}): fc
     case "type":
       return arbitraryForType(domain.type);
     case "oneOf":
+      if (domain.literals.length === 0) {
+        throw new Error("'oneOf' domain has no literals — cannot sample a value from an empty domain");
+      }
       return fc.constantFrom(...domain.literals);
     case "range":
       return fc.integer({ min: domain.lo, max: domain.hi });
     case "list": {
+      // Non-vacuity guard rail: a value-graph or iteration domain that can
+      // only ever produce the empty list would make any property
+      // quantifying over its elements vacuously true on every sample —
+      // manufacturing a green test that never actually exercised the
+      // predicate. Caught here, at compile time, rather than silently
+      // shipping a test coverage counts as emitted and confirmed.
+      if (domain.size.max === 0) {
+        throw new Error(
+          "'list' domain can never produce a non-empty list (size.max is 0) — a property quantifying over its elements would be vacuously true for every sample"
+        );
+      }
       const inner = domainToArbitrary(domain.of, ctx);
       return fc.array(inner, { minLength: domain.size.min, maxLength: domain.size.max });
     }

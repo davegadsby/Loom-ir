@@ -1,5 +1,5 @@
 $ loom validate examples/specs/signup-dialog.md --results examples/loom.results.json
 
-emission coverage:    0.0% (0/1)
-result coverage:      100.0% (0/0)
-expressibility ratio: 0.0% (0/1)
+emission coverage:    100.0% (1/1)
+result coverage:      0.0% (0/1)
+expressibility ratio: 100.0% (1/1)
