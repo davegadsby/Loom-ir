@@ -1,75 +1,19 @@
 import type { ComponentNode, EmittedFile, FieldNode, OnWireTarget, UsesNode } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
-import { loomTypeToTs } from "./loomTypeToTs.js";
-
-function isComputedPropValue(v: unknown): v is { expr: unknown } {
-  return v !== null && typeof v === "object" && !Array.isArray(v) && "expr" in v;
-}
-
-function hasComputedProps(nodes: readonly UsesNode[]): boolean {
-  return nodes.some((n) => Object.values(n.props ?? {}).some(isComputedPropValue));
-}
-
-function capitalize(s: string): string {
-  return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
-}
-
-function pascalCase(slug: string): string {
-  return slug.split("-").map(capitalize).join("");
-}
-
-/** Slot/prop names come from spec slugs and may contain hyphens, which aren't valid in a JS identifier. */
-function camelCase(slug: string): string {
-  const [first, ...rest] = slug.split("-");
-  return [first, ...rest.map(capitalize)].join("");
-}
+import {
+  capitalize,
+  camelCase,
+  collectReferencedComponents,
+  hasComputedProps,
+  isComputedPropValue,
+  loomTypeToTs,
+  machineLines,
+  pascalCase,
+} from "loom-emit-core";
 
 /** The default slot maps to React's built-in `children`; every other slot becomes its own named prop. */
 function slotPropName(slotName: string): string {
   return slotName === "default" ? "children" : camelCase(slotName);
-}
-
-function stateLiteral(state: ComponentNode["states"][number]): string {
-  return JSON.stringify({ id: state.name, ...state.flags });
-}
-
-/**
- * One `new Transition({...})` call, guard included as `Guard.from(expr)` —
- * states are plain data (no behavior to encapsulate), but a transition's
- * matching logic and a guard's evaluation are exactly what these classes
- * exist to own, so they're instantiated explicitly rather than left as
- * anonymous nested object literals.
- */
-function transitionLines(transition: ComponentNode["transitions"][number], indent: string): string[] {
-  const lines = [
-    `${indent}new Transition({`,
-    `${indent}  id: ${JSON.stringify(transition.name)},`,
-    `${indent}  from: ${JSON.stringify(transition.from)},`,
-    `${indent}  to: ${JSON.stringify(transition.to)},`,
-    `${indent}  trigger: ${JSON.stringify(transition.trigger)},`,
-  ];
-  if (transition.guard) lines.push(`${indent}  guard: Guard.from(${JSON.stringify(transition.guard)}),`);
-  lines.push(`${indent}}),`);
-  return lines;
-}
-
-/** `const __machine = new LoomMachine({ ... })`, formatted as readable multi-line source rather than one JSON line. */
-function machineLines(component: ComponentNode): string[] {
-  const lines: string[] = [`const __machine = new LoomMachine({`, `  states: [`];
-  for (const state of component.states) lines.push(`    ${stateLiteral(state)},`);
-  lines.push(`  ],`, `  transitions: [`);
-  for (const transition of component.transitions) lines.push(...transitionLines(transition, "    "));
-  lines.push(`  ],`, `});`, ``);
-  return lines;
-}
-
-/** Every distinct component reached by a composition tree, sorted for deterministic import ordering. */
-function collectReferencedComponents(nodes: readonly UsesNode[]): ComponentNode[] {
-  const seen = new Map<string, ComponentNode>();
-  for (const node of nodes) {
-    if (!seen.has(node.resolvedComponent.name)) seen.set(node.resolvedComponent.name, node.resolvedComponent);
-  }
-  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**

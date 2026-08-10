@@ -1,5 +1,5 @@
 {
-  "name": "loom-emit-angular",
+  "name": "loom-emit-core",
   "version": "0.0.0",
   "private": true,
   "license": "MIT",
@@ -10,9 +10,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "loom-ir": "workspace:*",
-    "loom-emit-styles": "workspace:*",
-    "loom-emit-core": "workspace:*"
+    "loom-ir": "workspace:*"
   },
   "devDependencies": {
     "loom-expr": "workspace:*"

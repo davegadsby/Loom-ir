@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "loom-ir": "workspace:*",
-    "loom-emit-styles": "workspace:*"
+    "loom-emit-styles": "workspace:*",
+    "loom-emit-core": "workspace:*"
   },
   "devDependencies": {
     "loom-expr": "workspace:*"

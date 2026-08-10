@@ -7,6 +7,7 @@
     { "path": "packages/loom-ir" },
     { "path": "packages/loom-schema" },
     { "path": "packages/loom-parser" },
+    { "path": "packages/loom-emit-core" },
     { "path": "packages/loom-emit-tests" },
     { "path": "packages/loom-emit-react" },
     { "path": "packages/loom-emit-angular" },

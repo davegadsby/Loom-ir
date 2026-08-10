@@ -108,6 +108,9 @@ importers:
 
   packages/loom-emit-angular:
     dependencies:
+      loom-emit-core:
+        specifier: workspace:*
+        version: link:../loom-emit-core
       loom-emit-styles:
         specifier: workspace:*
         version: link:../loom-emit-styles
@@ -125,8 +128,21 @@ importers:
         specifier: workspace:*
         version: link:../loom-ir
 
+  packages/loom-emit-core:
+    dependencies:
+      loom-ir:
+        specifier: workspace:*
+        version: link:../loom-ir
+    devDependencies:
+      loom-expr:
+        specifier: workspace:*
+        version: link:../loom-expr
+
   packages/loom-emit-react:
     dependencies:
+      loom-emit-core:
+        specifier: workspace:*
+        version: link:../loom-emit-core
       loom-emit-styles:
         specifier: workspace:*
         version: link:../loom-emit-styles
