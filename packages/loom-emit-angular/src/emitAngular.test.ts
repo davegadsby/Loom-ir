@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitAngular } from "./emitAngular.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture } from "./fixtures.js";
 
 describe("emitAngular", () => {
   it("emits one *.component.ts file per component", () => {
@@ -170,5 +170,36 @@ describe("emitAngular — native fields, computed getters, on wiring", () => {
   it("wires a multi-target on inline as chained X.emit({...}) template statements, payload sourced from the field's own class member", () => {
     const [file] = emitAngular(makeLoginFixture());
     expect(file!.contents).toContain('(press)="login.emit({ username: username }); closed.emit({  })"');
+  });
+});
+
+describe("emitAngular — authored derived values", () => {
+  it("emits a named getter (not an inline evaluate call in the template) computed from the field's own derived validity", () => {
+    const [file] = emitAngular(makeDerivedFixture());
+    expect(file!.contents).toContain("get invalid(): boolean {");
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"unop","op":"not","expr":{"type":"ref","name":"emailValid"}}, { email: this.email, emailValid: this.emailValid }) === true;'
+    );
+  });
+
+  it("a computed-prop getter's env additionally exposes the derived value's own getter, so a composed {expr} prop can reference it by name", () => {
+    const [file] = emitAngular(makeDerivedFixture());
+    expect(file!.contents).toContain("get submitButtonDisabled(): boolean {");
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"ref","name":"invalid"}, { email: this.email, emailValid: this.emailValid, invalid: this.invalid }) === true;'
+    );
+    expect(file!.contents).toContain('[disabled]="submitButtonDisabled"');
+  });
+
+  it("the derived value's own getter and the cross-referencing getter both actually evaluate correctly (proves the emission is sound)", () => {
+    const emailValid = evaluate(
+      { type: "builtin", name: "matches", args: [{ type: "ref", name: "email" }, { type: "literal", valueType: { kind: "string" }, value: "^[^@]+@[^@]+$" }] },
+      { email: "not-an-email" }
+    );
+    const invalid = evaluate({ type: "unop", op: "not", expr: { type: "ref", name: "emailValid" } }, { email: "not-an-email", emailValid });
+    const disabled = evaluate({ type: "ref", name: "invalid" }, { email: "not-an-email", emailValid, invalid });
+    expect(emailValid).toBe(false);
+    expect(invalid).toBe(true);
+    expect(disabled).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import type { Attr, ComponentNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode } from "loom-ir";
+import type { Attr, ComponentNode, DerivedNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode } from "loom-ir";
 import { lower, lowerComposition } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import {
@@ -7,9 +7,11 @@ import {
   collectReferencedComponents,
   condToJs,
   hasComputedProps,
+  hasDerivedValues,
   isComputedPropValue,
   loomTypeToTs,
   machineLines,
+  objectKey,
   pascalCase,
 } from "loom-emit-core";
 import type { Expr } from "loom-expr";
@@ -43,14 +45,23 @@ function computedPropGetterName(nodeName: string, propName: string): string {
   return `${camelCase(nodeName)}${capitalize(camelCase(propName))}`;
 }
 
-/** `{ propName: this.propName, fieldName: this.fieldName, fieldNameValid: this.fieldNameValid, ... }` — the env a computed-prop getter or a field's own validity evaluates against. */
-function envLiteral(props: readonly PropNode[], fields: readonly FieldNode[]): string {
+/**
+ * `{ propName: this.propName, fieldName: this.fieldName, fieldNameValid: this.fieldNameValid, ... }`
+ * — the env a computed-prop getter, a derived value's own getter, or a
+ * field's own validity evaluates against. `derived` is omitted by a derived
+ * value's own getter (composition.ts checks its `expr` against only props/
+ * fields, never another derived value) and included for a computed-prop
+ * getter, which — like React's `__env` — may reference a declared derived
+ * value by name.
+ */
+function envLiteral(props: readonly PropNode[], fields: readonly FieldNode[], derived: readonly DerivedNode[] = []): string {
   const parts = [
     ...props.map((p) => `${p.name}: this.${camelCase(p.name)}`),
     ...fields.flatMap((f) => {
       const c = camelCase(f.name);
-      return [`${f.name}: this.${c}`, `${f.name}Valid: this.${c}Valid`];
+      return [`${objectKey(f.name)}: this.${c}`, `${objectKey(`${f.name}Valid`)}: this.${c}Valid`];
     }),
+    ...derived.map((d) => `${objectKey(d.name)}: this.${camelCase(d.name)}`),
   ];
   return `{ ${parts.join(", ")} }`;
 }
@@ -246,7 +257,8 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   const usesNgIf = !!rootUses?.visibleWhen;
   const hasFiresWhen = events.some((e) => e.firesWhen);
   const fields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
-  const needsEvaluate = fields.length > 0 || hasComputedProps(component.composition);
+  const derivedValues = component.declarations.filter((d): d is DerivedNode => d.kind === "derived");
+  const needsEvaluate = fields.length > 0 || hasComputedProps(component.composition) || hasDerivedValues(component.declarations);
 
   const coreImports = ["Component", "EventEmitter", "Input", "Output"];
   if (hasFiresWhen) coreImports.push("OnChanges", "SimpleChanges");
@@ -327,11 +339,24 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     lines.push(``);
   }
 
+  // A derived value's own getter is unconditional (bool-only for now — nothing yet needs
+  // another valueType kind); a computed-prop getter's env additionally exposes derived names,
+  // so a composed `{ expr }` prop can reference one by name instead of repeating its expression.
+  for (const derived of derivedValues) {
+    if (derived.valueType.kind !== "bool") {
+      throw new Error(`emitAngular: derived '${derived.id}' has unsupported valueType kind '${derived.valueType.kind}' (only 'bool' is supported)`);
+    }
+    lines.push(`  get ${camelCase(derived.name)}(): boolean {`);
+    lines.push(`    return evaluate(${JSON.stringify(derived.expr)}, ${envLiteral(props, fields)}) === true;`);
+    lines.push(`  }`);
+    lines.push(``);
+  }
+
   for (const node of component.composition) {
     for (const [propName, value] of Object.entries(node.props ?? {})) {
       if (!isComputedPropValue(value)) continue;
       lines.push(`  get ${computedPropGetterName(node.name, propName)}(): boolean {`);
-      lines.push(`    return evaluate(${JSON.stringify(value.expr)}, ${envLiteral(props, fields)}) === true;`);
+      lines.push(`    return evaluate(${JSON.stringify(value.expr)}, ${envLiteral(props, fields, derivedValues)}) === true;`);
       lines.push(`  }`);
       lines.push(``);
     }

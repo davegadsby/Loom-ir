@@ -18,6 +18,7 @@ import { Checkbox } from "../generated/react/Checkbox";
 import { Button } from "../generated/react/Button";
 import { LoginDialog } from "../generated/react/LoginDialog";
 import { ConfirmationDialog } from "../generated/react/ConfirmationDialog";
+import { SignupDialog } from "../generated/react/SignupDialog";
 
 afterEach(cleanup);
 
@@ -99,6 +100,34 @@ describe("LoginDialog — native fields and live validation", () => {
   });
 });
 
+describe("SignupDialog — an authored derived value, cross-referenced from a composed prop", () => {
+  const emailInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[name="email"]')!;
+  const submitButton = (c: HTMLElement) => c.querySelectorAll('[data-loom-component="button"]')[0]!;
+
+  it("computes the named `invalid` derived value from the field's own validity, disabling Submit through it", () => {
+    const { container } = render(<SignupDialog />);
+    expect(submitButton(container).getAttribute("aria-disabled")).toBe("true");
+
+    fireEvent.change(emailInput(container), { target: { value: "not-an-email" } });
+    expect(submitButton(container).getAttribute("aria-disabled")).toBe("true");
+
+    fireEvent.change(emailInput(container), { target: { value: "a@b.co" } });
+    expect(submitButton(container).getAttribute("aria-disabled")).toBe("false");
+  });
+
+  it("shows and clears the field error live, same as LoginDialog's own fields", () => {
+    const { container } = render(<SignupDialog />);
+    const input = emailInput(container);
+    const error = () => container.querySelector('[data-loom-field-error="email"]');
+
+    expect(error()).toBeNull();
+    fireEvent.change(input, { target: { value: "nope" } });
+    expect(error()?.textContent).toBe("Enter a valid email address.");
+    fireEvent.change(input, { target: { value: "a@b.co" } });
+    expect(error()).toBeNull();
+  });
+});
+
 describe("known defects in the current compiler", () => {
   it.fails("Button should invoke onPress when clicked, but emits no click handler at all", () => {
     let pressed = false;
@@ -125,5 +154,15 @@ describe("known defects in the current compiler", () => {
     fireEvent.click(container.querySelectorAll('[data-loom-component="button"]')[0]!);
 
     expect(seen).toEqual([{ username: "a@b.co", password: "longenough" }]);
+  });
+
+  it.fails("SignupDialog should fire onSubscribed with the typed email when Submit is pressed — same root cause as the other two", () => {
+    const seen: Array<{ email: string }> = [];
+    const { container } = render(<SignupDialog onSubscribed={(p) => seen.push(p)} />);
+
+    fireEvent.change(container.querySelector<HTMLInputElement>('input[name="email"]')!, { target: { value: "a@b.co" } });
+    fireEvent.click(container.querySelectorAll('[data-loom-component="button"]')[0]!);
+
+    expect(seen).toEqual([{ email: "a@b.co" }]);
   });
 });

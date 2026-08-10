@@ -1,5 +1,5 @@
 import { typecheck, typeEquals, typeToString, type Expr, type LoomType, type TypecheckContext } from "loom-expr";
-import type { ComponentNode, EventNode, FieldNode, OnWireTarget, PropNode, PropValue } from "./nodes.js";
+import type { ComponentNode, DerivedNode, EventNode, FieldNode, OnWireTarget, PropNode, PropValue } from "./nodes.js";
 
 export class CompositionCheckError extends Error {}
 
@@ -34,6 +34,19 @@ export function checkComposition(component: ComponentNode): void {
   const ownEventNames = new Set(component.declarations.filter((d) => d.kind === "event").map((d) => d.name));
   const ownFields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
   const ownFieldNames = new Set(ownFields.map((f) => f.name));
+  const ownDerived = component.declarations.filter((d): d is DerivedNode => d.kind === "derived");
+
+  // Env any component-scoped expression typechecks against: own props, plus each declared
+  // field's own current value (string) and derived `<name>Valid` boolean. Used for a
+  // `DerivedNode`'s own `expr` below, and (extended with derived names themselves) for a
+  // composed `{ expr }` prop's value further down — but deliberately NOT for `FieldNode.validate`,
+  // which stays scoped to only its own field's value (see that check's own context literal).
+  const ownValueCtx: TypecheckContext = {
+    props: {
+      ...Object.fromEntries(ownProps.map((p) => [p.name, p.valueType])),
+      ...Object.fromEntries(ownFields.flatMap((f) => [[f.name, { kind: "string" } as LoomType], [`${f.name}Valid`, { kind: "bool" } as LoomType]])),
+    },
+  };
 
   for (const decl of component.declarations) {
     if (decl.kind === "event" && decl.firesWhen) {
@@ -53,6 +66,19 @@ export function checkComposition(component: ComponentNode): void {
       if (resultType.kind !== "bool") {
         throw new CompositionCheckError(
           `field '${decl.id}' validate must evaluate to bool, got '${typeToString(resultType)}'`
+        );
+      }
+    }
+    if (decl.kind === "derived") {
+      let resultType: LoomType;
+      try {
+        resultType = typecheck(decl.expr, ownValueCtx);
+      } catch (e) {
+        throw new CompositionCheckError(`derived '${decl.id}' has an invalid expression: ${(e as Error).message}`);
+      }
+      if (!typeEquals(resultType, decl.valueType)) {
+        throw new CompositionCheckError(
+          `derived '${decl.id}' declared type '${typeToString(decl.valueType)}' does not match its expression's type '${typeToString(resultType)}'`
         );
       }
     }
@@ -120,12 +146,13 @@ export function checkComposition(component: ComponentNode): void {
     throw new CompositionCheckError(`component '${component.id}' has composition nodes unreachable from its root`);
   }
 
-  // Env a `{ expr }` prop value's Expr is typechecked against: this component's own props, plus
-  // each declared field's own current value (string) and derived `<name>Valid` boolean.
+  // Env a `{ expr }` prop value's Expr is typechecked against: everything `ownValueCtx` already
+  // covers, plus each of this component's own authored `derived` values by name — letting a
+  // composed prop reference a named derived value instead of repeating its expression.
   const exprPropCtx: TypecheckContext = {
     props: {
-      ...Object.fromEntries(ownProps.map((p) => [p.name, p.valueType])),
-      ...Object.fromEntries(ownFields.flatMap((f) => [[f.name, { kind: "string" } as LoomType], [`${f.name}Valid`, { kind: "bool" } as LoomType]])),
+      ...ownValueCtx.props,
+      ...Object.fromEntries(ownDerived.map((d) => [d.name, d.valueType])),
     },
   };
 

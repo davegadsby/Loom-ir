@@ -112,3 +112,13 @@ All four are checked in CI (`.github/workflows/ci.yml`).
   expression) — this is a deliberate design boundary, not an oversight. See
   `packages/loom-expr/src/domains.ts`'s header comment before trying to
   "fix" it.
+- `loom-expr`'s identifier lexer has no hyphen in its grammar, so a
+  kebab-case name — the convention every declared prop/field/`derived`
+  value's `name` otherwise follows — can never be *referenced* from
+  expression text (only declared): `parseExpr("submit-disabled")` parses as
+  the binop `submit - disabled`, not a ref, and fails to typecheck as an
+  unresolved reference. Not new to any one feature; it's just unexercised
+  until something needs to reference a multi-word name from expression
+  text. Give anything you intend to reference from an `{expr}`/`validate`/
+  `guard`/etc. a single-word name for now. See `DerivedNode`'s doc comment
+  in `packages/loom-ir/src/nodes.ts` for where this was first hit directly.

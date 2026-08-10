@@ -197,6 +197,14 @@ function buildDeclarationNode(componentSlug: string, block: RawNodeBlock): Decla
         validate: yaml.validate ? parseExpr(yaml.validate as string) : undefined,
         invalidMessage: yaml.invalidMessage as string | undefined,
       };
+    case "derived":
+      return {
+        ...envelope,
+        kind: "derived",
+        name: block.slug,
+        valueType: parseTypeText(yaml.type as string),
+        expr: parseExpr(yaml.expr as string),
+      };
     case "method": {
       const rawParams = (yaml.params as Array<{ name: string; type: string }> | undefined) ?? [];
       return {

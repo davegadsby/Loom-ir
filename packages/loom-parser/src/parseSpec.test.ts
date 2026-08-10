@@ -410,6 +410,57 @@ invalidMessage: "Enter a valid email address."
     }
   });
 
+  it("parses a derived block, typechecked against a sibling field's own value and derived <name>Valid", () => {
+    const spec = `---
+name: signup
+kind: primitive
+---
+
+## Declarations
+
+### username
+
+\`\`\`yaml
+kind: field
+validate: 'matches(username, "^[^@]+@[^@]+$")'
+\`\`\`
+
+### submit-disabled
+
+\`\`\`yaml
+kind: derived
+type: bool
+expr: "not usernameValid"
+\`\`\`
+`;
+    const component = parseSpec(spec);
+    const derived = component.declarations.find((d) => d.kind === "derived");
+    expect(derived).toMatchObject({ kind: "derived", name: "submit-disabled", valueType: { kind: "bool" } });
+    expect(derived!.id).toBe("signup/declarations/submit-disabled");
+    if (derived!.kind === "derived") {
+      expect(derived!.expr).toMatchObject({ type: "unop", op: "not" });
+    }
+  });
+
+  it("rejects a derived block whose expression's type doesn't match its declared type", () => {
+    const spec = `---
+name: bad-signup
+kind: primitive
+---
+
+## Declarations
+
+### always-true
+
+\`\`\`yaml
+kind: derived
+type: string
+expr: "true"
+\`\`\`
+`;
+    expect(() => parseSpec(spec)).toThrow(/declared type 'string' does not match its expression's type 'bool'/);
+  });
+
   it("parses a composite spec with {fields} slotContent, an {expr} computed prop, and a multi-target 'on' wire with payload", () => {
     const buttonSpec = `---
 name: button

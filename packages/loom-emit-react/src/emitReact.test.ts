@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitReact } from "./emitReact.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture } from "./fixtures.js";
 
 describe("emitReact", () => {
   it("emits one PascalCase-named file per component", () => {
@@ -179,5 +179,38 @@ describe("emitReact — native fields, computed props, multi-target on", () => {
     expect(file!.contents).toContain(
       "onPress={() => { onLogin?.({ username: usernameValue }); onClosed?.({  }); }}"
     );
+  });
+});
+
+describe("emitReact — authored derived values", () => {
+  it("emits a named const computed from the field's own derived validity, using its own inline env (not __env)", () => {
+    const [file] = emitReact(makeDerivedFixture());
+    expect(file!.contents).toContain(
+      'const invalid = evaluate({"type":"unop","op":"not","expr":{"type":"ref","name":"emailValid"}}, { email: emailValue, emailValid: emailValid }) === true;'
+    );
+  });
+
+  it("exposes the derived value's name in __env so a composed prop can reference it", () => {
+    const [file] = emitReact(makeDerivedFixture());
+    expect(file!.contents).toContain("const __env: any = { email: emailValue, emailValid: emailValid, invalid: invalid };");
+  });
+
+  it("a composed {expr} prop referencing a derived value by name evaluates a bare ref against __env, not a repeated expression", () => {
+    const [file] = emitReact(makeDerivedFixture());
+    expect(file!.contents).toContain('disabled={evaluate({"type":"ref","name":"invalid"}, __env) === true}');
+  });
+
+  it("the emitted derived value and the __env cross-reference both actually evaluate correctly (proves the emission is sound)", () => {
+    const emailValue = "not-an-email";
+    const emailValid = evaluate(
+      { type: "builtin", name: "matches", args: [{ type: "ref", name: "email" }, { type: "literal", valueType: { kind: "string" }, value: "^[^@]+@[^@]+$" }] },
+      { email: emailValue }
+    );
+    const invalid = evaluate({ type: "unop", op: "not", expr: { type: "ref", name: "emailValid" } }, { email: emailValue, emailValid });
+    const __env = { email: emailValue, emailValid, invalid };
+    const disabled = evaluate({ type: "ref", name: "invalid" }, __env);
+    expect(emailValid).toBe(false);
+    expect(invalid).toBe(true);
+    expect(disabled).toBe(true);
   });
 });

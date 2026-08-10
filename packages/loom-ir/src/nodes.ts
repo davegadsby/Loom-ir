@@ -65,7 +65,37 @@ export interface FieldNode extends LoomNodeEnvelope {
   invalidMessage?: string;
 }
 
-export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode | FieldNode;
+/**
+ * A named, typed value computed from this component's own props and fields
+ * — never rendered on its own, but addressable (`component/declarations/<slug>`,
+ * same as any other declaration), so a claim can eventually reference it by
+ * name once the claim language reaches the value graph. Unlike an anonymous
+ * `{ expr }` computed `UsesNode` prop (§ Composition), which is scoped to one
+ * composed instance, a `DerivedNode` is named once and can be referenced from
+ * multiple places — including a composed prop's own `{ expr }`, by name,
+ * instead of repeating the expression. `expr` is checked against this
+ * component's own props/fields only, never another `DerivedNode` — avoids
+ * needing a dependency ordering or cycle check in this first pass.
+ *
+ * Known gap: `name` follows the same kebab-case slug convention every other
+ * declaration uses, but `loom-expr`'s identifier lexer has no hyphen in its
+ * grammar — `parseExpr("submit-disabled")` parses as the binop
+ * `submit - disabled`, not a single ref, and fails to typecheck as an
+ * unresolved reference. A multi-word `derived` name can therefore never
+ * actually be *referenced* from expression text (only declared) until that's
+ * addressed. This isn't new here — it silently affects any kebab-case prop
+ * or field name too, just unexercised until something needed referencing
+ * one from expression text. Not fixed in this pass; name a `derived` value
+ * you intend to reference elsewhere as a single word for now.
+ */
+export interface DerivedNode extends LoomNodeEnvelope {
+  kind: "derived";
+  name: string;
+  valueType: LoomType;
+  expr: Expr;
+}
+
+export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode | FieldNode | DerivedNode;
 
 // ---------------------------------------------------------------------------
 // Machine

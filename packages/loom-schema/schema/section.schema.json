@@ -9,6 +9,7 @@
     { "$ref": "#/$defs/slot" },
     { "$ref": "#/$defs/method" },
     { "$ref": "#/$defs/field" },
+    { "$ref": "#/$defs/derived" },
     { "$ref": "#/$defs/state" },
     { "$ref": "#/$defs/transition" },
     { "$ref": "#/$defs/guard" },
@@ -99,6 +100,16 @@
         "initialValue": { "type": "string", "description": "Defaults to \"\" if omitted." },
         "validate": { "type": "string", "description": "Expression-language text (§6.4), evaluated against `{ [name]: currentValue }`. Omitted means always valid." },
         "invalidMessage": { "type": "string", "description": "Shown once the field has been touched and validate() is currently false." }
+      }
+    },
+    "derived": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "type", "expr"],
+      "properties": {
+        "kind": { "const": "derived" },
+        "type": { "type": "string", "description": "Type-text, e.g. 'bool'." },
+        "expr": { "type": "string", "description": "Expression-language text (§6.4), evaluated against this component's own props/fields." }
       }
     },
     "state": {

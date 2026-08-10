@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkComposition, CompositionCheckError } from "./composition.js";
-import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode } from "./nodes.js";
+import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode, DerivedNode } from "./nodes.js";
 
 function makeChildComponent(overrides: Partial<ComponentNode> = {}): ComponentNode {
   return {
@@ -387,5 +387,119 @@ describe("checkComposition", () => {
       composition: [makeUses({ root: true, on: { press: "closed" } })],
     });
     expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  describe("derived", () => {
+    it("accepts a derived value whose expression's type matches its declared type", () => {
+      const submitDisabled: DerivedNode = {
+        id: "widget/declarations/submit-disabled",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "submit-disabled",
+        valueType: { kind: "bool" },
+        expr: { type: "unop", op: "not", expr: { type: "ref", name: "usernameValid" } },
+      };
+      const widget = makeWidget({ declarations: [username, submitDisabled] });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("throws when a derived expression is malformed", () => {
+      const bad: DerivedNode = {
+        id: "widget/declarations/bad",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "bad",
+        valueType: { kind: "bool" },
+        expr: { type: "ref", name: "nonexistent" },
+      };
+      const widget = makeWidget({ declarations: [bad] });
+      expect(() => checkComposition(widget)).toThrow(/invalid expression/);
+    });
+
+    it("throws when a derived expression's type doesn't match its declared type", () => {
+      const wrongType: DerivedNode = {
+        id: "widget/declarations/wrong-type",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "wrong-type",
+        valueType: { kind: "string" },
+        expr: { type: "unop", op: "not", expr: { type: "ref", name: "usernameValid" } },
+      };
+      const widget = makeWidget({ declarations: [username, wrongType] });
+      expect(() => checkComposition(widget)).toThrow(/declared type 'string' does not match its expression's type 'bool'/);
+    });
+
+    it("can reference own props alongside a field's derived <name>Valid", () => {
+      const disabledProp: PropNode = {
+        id: "widget/declarations/disabled",
+        kind: "prop",
+        origin: "own",
+        assertable: false,
+        name: "disabled",
+        valueType: { kind: "bool" },
+      };
+      const submitDisabled: DerivedNode = {
+        id: "widget/declarations/submit-disabled",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "submit-disabled",
+        valueType: { kind: "bool" },
+        expr: {
+          type: "binop",
+          op: "or",
+          left: { type: "ref", name: "disabled" },
+          right: { type: "unop", op: "not", expr: { type: "ref", name: "usernameValid" } },
+        },
+      };
+      const widget = makeWidget({ declarations: [disabledProp, username, submitDisabled] });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("lets a composed {expr} prop reference a declared derived value by name", () => {
+      const submitDisabled: DerivedNode = {
+        id: "widget/declarations/submit-disabled",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "submit-disabled",
+        valueType: { kind: "bool" },
+        expr: { type: "unop", op: "not", expr: { type: "ref", name: "usernameValid" } },
+      };
+      const widget = makeWidget({
+        declarations: [username, submitDisabled],
+        composition: [makeBoolUses({ root: true, props: { disabled: { expr: { type: "ref", name: "submit-disabled" } } } })],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("does not let a composed {expr} prop reference another derived value's own name from within a derived expression", () => {
+      // i.e. one DerivedNode's expr can't reference a sibling DerivedNode — confirmed by the
+      // "invalid expression" case above using an entirely unrelated field; this test instead
+      // confirms a real cross-derived reference is rejected the same way, not silently accepted.
+      const a: DerivedNode = {
+        id: "widget/declarations/a",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "a",
+        valueType: { kind: "bool" },
+        expr: { type: "literal", valueType: { kind: "bool" }, value: true },
+      };
+      const b: DerivedNode = {
+        id: "widget/declarations/b",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "b",
+        valueType: { kind: "bool" },
+        expr: { type: "ref", name: "a" },
+      };
+      const widget = makeWidget({ declarations: [a, b] });
+      expect(() => checkComposition(widget)).toThrow(/invalid expression/);
+    });
   });
 });

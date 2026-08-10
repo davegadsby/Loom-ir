@@ -345,3 +345,95 @@ export function makeLoginFixture(): ComponentNode {
     composition: [dialogUses, loginButton],
   });
 }
+
+/**
+ * A `signup-widget` declaring one field (`email`) and one *authored*
+ * `derived` value (`invalid`) computed from that field's own derived
+ * validity, referenced by name from a composed button's `{expr}` prop
+ * instead of repeating the expression.
+ *
+ * Deliberately single-word, not `submit-disabled`: `loom-expr`'s identifier
+ * lexer has no hyphen in its grammar (`[A-Za-z_][A-Za-z0-9_]*`), so a
+ * hyphenated name can never be *referenced* from expression text at all —
+ * `parseExpr("submit-disabled")` parses as the binop `submit - disabled`,
+ * not a single ref, and fails to typecheck as an unresolved reference. This
+ * isn't new to `derived` — it silently affects any kebab-case prop or field
+ * name too, just unexercised until a name needed referencing from
+ * expression text (every existing example's referenced names happen to be
+ * single words). Tracked as a known gap in `DerivedNode`'s doc comment and
+ * `AGENTS.md`, not fixed here.
+ */
+export function makeDerivedFixture(): ComponentNode {
+  const dialog = makeChildComponent("dialog", {
+    declarations: [
+      { id: "dialog/declarations/body", kind: "slot", origin: "own", assertable: false, name: "body" },
+      { id: "dialog/declarations/actions", kind: "slot", origin: "own", assertable: false, name: "actions" },
+    ],
+  });
+  const button = makeChildComponent("button", {
+    declarations: [
+      {
+        id: "button/declarations/disabled",
+        kind: "prop",
+        origin: "own",
+        assertable: false,
+        name: "disabled",
+        valueType: { kind: "bool" },
+        defaultValue: false,
+      },
+      { id: "button/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+    ],
+  });
+
+  const email: FieldNode = {
+    id: "signup-widget/declarations/email",
+    kind: "field",
+    origin: "own",
+    assertable: false,
+    name: "email",
+    validate: parseExpr('matches(email, "^[^@]+@[^@]+$")'),
+    invalidMessage: "Enter a valid email address.",
+  };
+
+  const invalid = {
+    id: "signup-widget/declarations/invalid",
+    kind: "derived" as const,
+    origin: "own" as const,
+    assertable: false as const,
+    name: "invalid",
+    valueType: { kind: "bool" as const },
+    expr: parseExpr("not emailValid"),
+  };
+
+  const submitButton: UsesNode = {
+    id: "signup-widget/composition/submit-button",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "submit-button",
+    component: "button",
+    resolvedComponent: button,
+    props: { disabled: { expr: parseExpr("invalid") } },
+    slotContent: { default: { text: "Sign up" } },
+  };
+
+  const dialogUses: UsesNode = {
+    id: "signup-widget/composition/dialog-instance",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "dialog-instance",
+    component: "dialog",
+    resolvedComponent: dialog,
+    root: true,
+    slotContent: {
+      body: { fields: ["email"] },
+      actions: { uses: ["submit-button"] },
+    },
+  };
+
+  return makeChildComponent("signup-widget", {
+    declarations: [email, invalid],
+    composition: [dialogUses, submitButton],
+  });
+}

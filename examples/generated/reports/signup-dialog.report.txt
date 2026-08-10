@@ -1,0 +1,11 @@
+$ loom report examples/specs/signup-dialog.md --results examples/loom.results.json
+
+not-applicable component            signup-dialog
+not-applicable field                signup-dialog/declarations/email
+not-applicable derived              signup-dialog/declarations/invalid
+not-applicable event                signup-dialog/declarations/subscribed
+unverifiable   unexpressible        signup-dialog/claims/validity-gated-enablement-is-unexpressible
+not-applicable uses                 signup-dialog/composition/dialog-instance
+not-applicable uses                 signup-dialog/composition/submit-button
+not-applicable intent               signup-dialog/prose/intent
+not-applicable rationale            signup-dialog/prose/rationale

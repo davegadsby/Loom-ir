@@ -93,6 +93,23 @@ describe("validateNodeBlock", () => {
     expect(validateNodeBlock({ kind: "field" })).toMatchObject({ kind: "field" });
   });
 
+  it("accepts a valid derived block", () => {
+    const block = validateNodeBlock({
+      kind: "derived",
+      type: "bool",
+      expr: "not (usernameValid and passwordValid)",
+    });
+    expect(block.kind).toBe("derived");
+  });
+
+  it("rejects a derived block missing 'expr'", () => {
+    expect(() => validateNodeBlock({ kind: "derived", type: "bool" })).toThrow(SchemaValidationError);
+  });
+
+  it("rejects a derived block missing 'type'", () => {
+    expect(() => validateNodeBlock({ kind: "derived", expr: "true" })).toThrow(SchemaValidationError);
+  });
+
   it("accepts slotContent.fields", () => {
     const block = validateNodeBlock({
       kind: "uses",

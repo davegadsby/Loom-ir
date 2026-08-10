@@ -7,6 +7,7 @@ export type {
   SlotNode,
   MethodNode,
   FieldNode,
+  DerivedNode,
   DeclarationNode,
   StateNode,
   TransitionNode,
