@@ -37,5 +37,10 @@ jobs:
       - name: Build
         run: pnpm -r build
 
+      # Proves the compiler's committed output is valid code. examplesUpToDate
+      # only proves the output text has not changed, never that it compiles.
+      - name: Typecheck generated examples
+        run: pnpm typecheck:examples
+
       - name: Test
         run: pnpm test

@@ -1,0 +1,30 @@
+{
+  "//": [
+    "Type-checks the COMMITTED generated components, plus the hand-written render",
+    "tests that exercise them. Emits nothing — it exists only to prove the",
+    "compiler's output is valid, runnable code.",
+    "",
+    "Run via `pnpm typecheck:examples`. Before this existed, examplesUpToDate.test.ts",
+    "only proved the output text had not changed, never that it compiled or worked.",
+    "",
+    "moduleResolution is 'Bundler', not the repo-wide 'NodeNext': the emitted",
+    "components use extensionless relative imports (`from \"./Dialog\"`) because they",
+    "are consumed by a bundler, not by Node's ESM loader. Checking them under",
+    "NodeNext would fail them for a convention correct for their actual target."
+  ],
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "jsx": "react-jsx",
+    "experimentalDecorators": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["generated/react", "generated/angular", "tests", "types"]
+}
