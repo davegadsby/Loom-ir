@@ -93,24 +93,22 @@ function lowerField(field: FieldNode): RenderNode {
 }
 
 /**
- * Lowers one `UsesNode.on` map to `Handler`s. `payload: "forward"` marks
- * today's bare-string sugar (`on: { press: "closed" }`) — a real, currently
- * backend-divergent meaning: Angular's printer honors it by forwarding
- * `$event`, React's ignores it and prints an empty payload, matching the two
- * backends' existing (differing) behavior exactly. Unifying that meaning is
- * Phase 1d's job, not this lowering's.
+ * Lowers one `UsesNode.on` map to `Handler`s. Bare-string sugar
+ * (`on: { press: "closed" }`) means exactly `{ event: "closed" }` with no
+ * `payload` — matching `OnWireTarget`'s own doc comment ("an empty-payload
+ * forward"), which is what this always produces now. Angular's printer
+ * used to instead forward `$event`; that divergence from the documented
+ * meaning is what this unifies away, not a distinction this lowering needs
+ * to preserve.
  */
 function lowerOnWiring(on: UsesNode["on"]): Handler[] {
   return Object.entries(on ?? {}).map(([childEventName, wireRaw]) => {
     const wires = Array.isArray(wireRaw) ? wireRaw : [wireRaw];
     const effects: Effect[] = wires.map((w) => {
-      const isBareSugar = typeof w === "string";
-      const target: OnWireTarget = isBareSugar ? { event: w as string } : (w as OnWireTarget);
-      const payload: EmitPayload = isBareSugar
-        ? "forward"
-        : Object.fromEntries(
-            Object.entries(target.payload ?? {}).map(([k, source]): [string, Expr] => [k, { type: "ref", name: source }])
-          );
+      const target: OnWireTarget = typeof w === "string" ? { event: w } : w;
+      const payload: EmitPayload = Object.fromEntries(
+        Object.entries(target.payload ?? {}).map(([k, source]): [string, Expr] => [k, { type: "ref", name: source }])
+      );
       return { kind: "emit", event: target.event, payload };
     });
     return { on: childEventName, effects };

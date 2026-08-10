@@ -66,7 +66,7 @@ function makeChildComponent(name: string, overrides: Partial<ComponentNode> = {}
   };
 }
 
-describe("lowerComposition — confirmation-dialog shape (instance/fills/when/forward-payload handler)", () => {
+describe("lowerComposition — confirmation-dialog shape (instance/fills/when/bare-sugar handler)", () => {
   const dialog = makeChildComponent("dialog", {
     declarations: [
       { id: "dialog/declarations/title", kind: "slot", origin: "own", assertable: false, name: "title" },
@@ -139,7 +139,7 @@ describe("lowerComposition — confirmation-dialog shape (instance/fills/when/fo
     expect(actionsFill[0]!.children[0]).toMatchObject({ kind: "instance", name: "confirm-button" });
   });
 
-  it("lowers bare-string 'on' sugar to a forward-payload emit effect", () => {
+  it("lowers bare-string 'on' sugar to an empty-payload emit effect", () => {
     const tree = lowerComposition(dialogUses, widget);
     const instance = tree.kind === "when" ? tree.then[0]! : tree;
     if (instance.kind !== "instance") throw new Error("unreachable");
@@ -147,7 +147,7 @@ describe("lowerComposition — confirmation-dialog shape (instance/fills/when/fo
     if (actionsFill.kind !== "fragment") throw new Error("unreachable");
     const confirmInstance = actionsFill.children[0]!;
     if (confirmInstance.kind !== "instance") throw new Error("unreachable");
-    expect(confirmInstance.handlers).toEqual([{ on: "press", effects: [{ kind: "emit", event: "closed", payload: "forward" }] }]);
+    expect(confirmInstance.handlers).toEqual([{ on: "press", effects: [{ kind: "emit", event: "closed", payload: {} }] }]);
   });
 
   it("omits the when wrapper entirely when the root has no visibleWhen", () => {

@@ -116,7 +116,7 @@ describe("emitAngular — composition", () => {
     const [file] = emitAngular(makeCompositionFixture());
     expect(file!.contents).toContain(
       '<ng-container *ngIf="open"><loom-dialog><div slot="title">Confirm Deletion</div>' +
-        '<div slot="actions"><loom-button [variant]="\'primary\'" (press)="closed.emit($event)">Confirm</loom-button></div>' +
+        '<div slot="actions"><loom-button [variant]="\'primary\'" (press)="closed.emit({  })">Confirm</loom-button></div>' +
         "</loom-dialog></ng-container>"
     );
   });

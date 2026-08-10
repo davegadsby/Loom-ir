@@ -69,17 +69,15 @@ function printPropAttr(k: string, expr: Expr, instanceName: string): string {
 }
 
 /**
- * `payload: "forward"` (bare-string `on` sugar, lowered) forwards whatever
- * the child emitted — Angular's `$event` genuinely can carry that, unlike
- * React's callback-only model, so this backend honors it rather than
- * discarding it (see `printEmitEffect` in `loom-emit-react` for the
- * opposite, currently-divergent choice — unifying the two is Phase 1d's
- * job). A constructed payload references its source bare — Angular
- * template expressions reach a class member directly, field or prop alike,
- * with no naming distinction the way React's `Value`-suffixed state does.
+ * A constructed payload references its source bare — Angular template
+ * expressions reach a class member directly, field or prop alike, with no
+ * naming distinction the way React's `Value`-suffixed state has. Bare-string
+ * `on` sugar lowers to an empty payload (matching `OnWireTarget`'s own
+ * "empty-payload forward" doc comment): this used to instead forward
+ * `$event`, which happened to be invisible in every current example only
+ * because every source component's declared payload is itself `record{}`.
  */
 function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "emit" }>): string {
-  if (effect.payload === "forward") return `${effect.event}.emit($event)`;
   const payloadEntries = Object.entries(effect.payload).map(([k, expr]) => `${k}: ${(expr as Extract<Expr, { type: "ref" }>).name}`);
   return `${effect.event}.emit({ ${payloadEntries.join(", ")} })`;
 }

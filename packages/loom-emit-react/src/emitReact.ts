@@ -47,22 +47,15 @@ function printPropExpr(expr: Expr): string {
 }
 
 /**
- * `emit` is the only effect kind composition lowers to yet. `"forward"` (the
- * lowered form of bare-string `on` sugar) has no React equivalent — React
- * callbacks are always an explicit constructed object, never a raw DOM
- * event — so it prints an empty payload, matching today's actual (if
- * arguably surprising) behavior rather than inventing new semantics here.
- * A field-sourced payload value carries a `Value` suffix (React's field
- * state variable is named `<name>Value`); a prop-sourced one prints as-is.
+ * `emit` is the only effect kind composition lowers to yet. A field-sourced
+ * payload value carries a `Value` suffix (React's field state variable is
+ * named `<name>Value`); a prop-sourced one prints as-is.
  */
 function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "emit" }>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
-  const payloadEntries =
-    effect.payload === "forward"
-      ? []
-      : Object.entries(effect.payload).map(([k, expr]) => {
-          const source = (expr as Extract<Expr, { type: "ref" }>).name;
-          return `${k}: ${fieldsByName.has(source) ? `${camelCase(source)}Value` : source}`;
-        });
+  const payloadEntries = Object.entries(effect.payload).map(([k, expr]) => {
+    const source = (expr as Extract<Expr, { type: "ref" }>).name;
+    return `${k}: ${fieldsByName.has(source) ? `${camelCase(source)}Value` : source}`;
+  });
   return `on${capitalize(effect.event)}?.({ ${payloadEntries.join(", ")} });`;
 }
 

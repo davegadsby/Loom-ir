@@ -46,7 +46,7 @@ export interface Handler {
 export type Effect =
   | { kind: "set-cell"; cell: string; from: { kind: "event-value" } | { kind: "expr"; expr: Expr } }
   | { kind: "dispatch"; event: string }
-  | { kind: "emit"; event: string; payload: "forward" | Record<string, Expr> }
+  | { kind: "emit"; event: string; payload: Record<string, Expr> }
   | { kind: "invoke"; resource: string; args: Record<string, Expr> };
 
 /**

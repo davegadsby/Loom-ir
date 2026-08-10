@@ -8,7 +8,7 @@ import { DialogComponent } from "./Dialog.component";
   selector: "loom-confirmation-dialog",
   standalone: true,
   imports: [ButtonComponent, DialogComponent, NgIf],
-  template: `<div [attr.data-loom-component]="'confirmation-dialog'"><ng-container *ngIf="open"><loom-dialog><div slot="title">Confirm Deletion</div><div slot="body">This action cannot be undone. Are you sure you want to delete this item?</div><div slot="actions"><loom-button [variant]="'primary'" (press)="closed.emit($event)">Confirm</loom-button></div></loom-dialog></ng-container></div>`,
+  template: `<div [attr.data-loom-component]="'confirmation-dialog'"><ng-container *ngIf="open"><loom-dialog><div slot="title">Confirm Deletion</div><div slot="body">This action cannot be undone. Are you sure you want to delete this item?</div><div slot="actions"><loom-button [variant]="'primary'" (press)="closed.emit({  })">Confirm</loom-button></div></loom-dialog></ng-container></div>`,
 })
 export class ConfirmationDialogComponent implements OnChanges {
   /** confirmation-dialog/declarations/open */
