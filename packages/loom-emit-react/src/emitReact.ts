@@ -1,4 +1,5 @@
-import type { ComponentNode, EmittedFile, FieldNode, OnWireTarget, UsesNode } from "loom-ir";
+import type { ComponentNode, EmittedFile, FieldNode, OnWireTarget, RenderNode, UsesNode } from "loom-ir";
+import { lower } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import {
   capitalize,
@@ -14,6 +15,29 @@ import {
 /** The default slot maps to React's built-in `children`; every other slot becomes its own named prop. */
 function slotPropName(slotName: string): string {
   return slotName === "default" ? "children" : camelCase(slotName);
+}
+
+/**
+ * Prints the render tree `lower()` produces for the non-composition path.
+ * Only `slot` is exercised yet (Phase 1b); every other `RenderNode` kind
+ * throws rather than silently rendering nothing, since a component that
+ * needs one isn't supposed to reach this printer until a later phase adds
+ * support for it.
+ */
+function printRenderNodes(nodes: readonly RenderNode[], componentSlug: string, styledParts: ReadonlySet<string>): string[] {
+  const out: string[] = [];
+  for (const node of nodes) {
+    if (node.kind !== "slot") throw new Error(`printRenderNodes: unsupported render node kind '${node.kind}'`);
+    if (node.name === "default") {
+      out.push(`      {children}`);
+    } else {
+      const classAttr = styledParts.has(node.name)
+        ? ` className=${JSON.stringify(partClassName(componentSlug, node.name))}`
+        : "";
+      out.push(`      <div data-loom-slot=${JSON.stringify(node.name)}${classAttr}>{${slotPropName(node.name)}}</div>`);
+    }
+  }
+  return out;
 }
 
 /**
@@ -254,17 +278,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
       lines.push(`      ${composedJsx}`);
     }
   } else {
-    for (const slot of slots) {
-      const varName = slotPropName(slot.name);
-      if (slot.name === "default") {
-        lines.push(`      {children}`);
-      } else {
-        const classAttr = styledParts.has(slot.name)
-          ? ` className=${JSON.stringify(partClassName(component.name, slot.name))}`
-          : "";
-        lines.push(`      <div data-loom-slot=${JSON.stringify(slot.name)}${classAttr}>{${varName}}</div>`);
-      }
-    }
+    lines.push(...printRenderNodes(lower(component), component.name, styledParts));
   }
   lines.push(`    </div>`);
   lines.push(`  );`);

@@ -46,3 +46,6 @@ export { visit, reduce, findById, allNodes, children } from "./visit.js";
 
 export { checkPath, PathCheckError } from "./paths.js";
 export { checkComposition, CompositionCheckError } from "./composition.js";
+
+export type { RenderNode, Attr, Handler, Effect, Scope } from "./render.js";
+export { lower } from "./lower.js";

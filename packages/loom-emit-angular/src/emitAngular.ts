@@ -1,4 +1,5 @@
-import type { ComponentNode, EmittedFile, EventNode, FieldNode, PropNode, UsesNode } from "loom-ir";
+import type { ComponentNode, EmittedFile, EventNode, FieldNode, PropNode, RenderNode, UsesNode } from "loom-ir";
+import { lower } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import {
   capitalize,
@@ -10,6 +11,30 @@ import {
   machineLines,
   pascalCase,
 } from "loom-emit-core";
+
+/**
+ * Prints the render tree `lower()` produces for the non-composition path.
+ * Only `slot` is exercised yet (Phase 1b); every other `RenderNode` kind
+ * throws rather than silently rendering nothing. Unlike React, Angular's
+ * named-slot projections must print before the selector-less default
+ * fallback regardless of declaration order — `<ng-content>` with no
+ * `select` claims whatever the named selectors didn't, so it has to come
+ * last. `lower()` keeps the tree itself in declaration order (React needs
+ * that); this reordering is a real Angular-specific rendering decision, not
+ * an IR concern.
+ */
+function printRenderNodes(nodes: readonly RenderNode[]): string {
+  const slots = nodes.filter((n): n is Extract<RenderNode, { kind: "slot" }> => n.kind === "slot");
+  const unsupported = nodes.find((n) => n.kind !== "slot");
+  if (unsupported) throw new Error(`printRenderNodes: unsupported render node kind '${unsupported.kind}'`);
+
+  const named = slots.filter((s) => s.name !== "default");
+  const defaultSlot = slots.find((s) => s.name === "default");
+  return [
+    ...named.map((s) => `<ng-content select="[slot=${s.name}]"></ng-content>`),
+    ...(defaultSlot ? ["<ng-content></ng-content>"] : []),
+  ].join("");
+}
 
 /** Name of the class getter backing one composed node's one `{expr}` prop — e.g. `login-button` + `disabled` -> `loginButtonDisabled`. */
 function computedPropGetterName(nodeName: string, propName: string): string {
@@ -226,12 +251,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     const composed = renderUsesTemplate(rootUses, byName, fieldsByName);
     templateBody = rootUses.visibleWhen ? `<ng-container *ngIf="${rootUses.visibleWhen}">${composed}</ng-container>` : composed;
   } else {
-    const namedSlots = slots.filter((s) => s.name !== "default");
-    const defaultSlot = slots.find((s) => s.name === "default");
-    templateBody = [
-      ...namedSlots.map((slot) => `<ng-content select="[slot=${slot.name}]"></ng-content>`),
-      ...(defaultSlot ? ["<ng-content></ng-content>"] : []),
-    ].join("");
+    templateBody = printRenderNodes(lower(component));
   }
   const template = `<div ${attrs.join(" ")}>${templateBody}</div>`;
 
