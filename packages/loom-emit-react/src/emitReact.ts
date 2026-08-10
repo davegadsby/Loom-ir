@@ -1,12 +1,13 @@
-import type { ComponentNode, EmittedFile, FieldNode, OnWireTarget, RenderNode, UsesNode } from "loom-ir";
-import { lower } from "loom-ir";
+import type { ComponentNode, EmittedFile, FieldNode, Handler, RenderNode } from "loom-ir";
+import { lower, lowerComposition } from "loom-ir";
+import type { Expr } from "loom-expr";
 import { partClassName } from "loom-emit-styles";
 import {
   capitalize,
   camelCase,
   collectReferencedComponents,
+  condToJs,
   hasComputedProps,
-  isComputedPropValue,
   loomTypeToTs,
   machineLines,
   pascalCase,
@@ -40,84 +41,115 @@ function printRenderNodes(nodes: readonly RenderNode[], componentSlug: string, s
   return out;
 }
 
-/**
- * A native `<input>` bound to this field's own local state — `value`/
- * `touched` are recomputed/set together on every keystroke, `<name>Valid`
- * is recomputed inline from `evaluate()` each render, and the invalid
- * message (if any) only shows once the field has been touched.
- */
-function renderFieldJsx(field: FieldNode): string {
-  const camel = camelCase(field.name);
-  const Camel = capitalize(camel);
-  const inputType = field.secret ? "password" : "text";
-  const parts = [
-    `<input type=${JSON.stringify(inputType)} name=${JSON.stringify(field.name)} value={${camel}Value} onChange={handle${Camel}Change} aria-invalid={${camel}Touched && !${camel}Valid} />`,
-  ];
-  if (field.invalidMessage) {
-    parts.push(
-      `{${camel}Touched && !${camel}Valid && <span data-loom-field-error=${JSON.stringify(field.name)}>{${JSON.stringify(field.invalidMessage)}}</span>}`
-    );
-  }
-  return `<React.Fragment>${parts.join("")}</React.Fragment>`;
+/** A literal prop prints its raw value directly; anything else is a computed `{expr}` prop, live-evaluated against `__env`. */
+function printPropExpr(expr: Expr): string {
+  return expr.type === "literal" ? JSON.stringify(expr.value) : `evaluate(${JSON.stringify(expr)}, __env) === true`;
 }
 
 /**
- * Recursively renders one `UsesNode` (and, through `slotContent.*.uses`/
- * `slotContent.*.fields`, its nested children/native fields) as a JSX
- * element. A resolved child's own props interface already types each
- * non-default slot as `React.ReactNode`, so slot content becomes a JSX
- * attribute (`actions={...}`), never raw children — React has no per-slot
- * child-targeting mechanism. A `{ expr }` prop value is evaluated live
- * against `__env` (the enclosing component's own props + field state).
- * `on` wiring adds one or more extra callback invocations reusing the same
- * `on${Capitalize(name)}` naming convention the props interface generator
- * uses elsewhere in this file, with each wire's `payload` sourced from a
- * sibling field's current value or the enclosing component's own prop.
+ * `emit` is the only effect kind composition lowers to yet. `"forward"` (the
+ * lowered form of bare-string `on` sugar) has no React equivalent — React
+ * callbacks are always an explicit constructed object, never a raw DOM
+ * event — so it prints an empty payload, matching today's actual (if
+ * arguably surprising) behavior rather than inventing new semantics here.
+ * A field-sourced payload value carries a `Value` suffix (React's field
+ * state variable is named `<name>Value`); a prop-sourced one prints as-is.
  */
-function renderUsesJsx(node: UsesNode, byName: ReadonlyMap<string, UsesNode>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
-  const ref = node.resolvedComponent;
-  const refName = pascalCase(ref.name);
-  const refSlots = ref.declarations.filter((d) => d.kind === "slot");
+function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "emit" }>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
+  const payloadEntries =
+    effect.payload === "forward"
+      ? []
+      : Object.entries(effect.payload).map(([k, expr]) => {
+          const source = (expr as Extract<Expr, { type: "ref" }>).name;
+          return `${k}: ${fieldsByName.has(source) ? `${camelCase(source)}Value` : source}`;
+        });
+  return `on${capitalize(effect.event)}?.({ ${payloadEntries.join(", ")} });`;
+}
 
-  const propAttrs = Object.entries(node.props ?? {}).map(([k, v]) =>
-    isComputedPropValue(v) ? `${k}={evaluate(${JSON.stringify(v.expr)}, __env) === true}` : `${k}={${JSON.stringify(v)}}`
-  );
-
-  const namedSlotAttrs: string[] = [];
-  let defaultChildrenExpr: string | undefined;
-  for (const slot of refSlots) {
-    const content = node.slotContent?.[slot.name];
-    if (!content) continue;
-    const rendered =
-      "text" in content
-        ? JSON.stringify(content.text)
-        : "uses" in content
-          ? `<>${content.uses.map((n) => renderUsesJsx(byName.get(n)!, byName, fieldsByName)).join("")}</>`
-          : `<>${content.fields.map((n) => renderFieldJsx(fieldsByName.get(n)!)).join("")}</>`;
-    if (slot.name === "default") {
-      defaultChildrenExpr = rendered;
-    } else {
-      namedSlotAttrs.push(`${slotPropName(slot.name)}={${rendered}}`);
-    }
-  }
-
-  const onAttrs = Object.entries(node.on ?? {}).map(([childEventName, wireRaw]) => {
-    const wires = Array.isArray(wireRaw) ? wireRaw : [wireRaw];
-    const calls = wires.map((w) => {
-      const target: OnWireTarget = typeof w === "string" ? { event: w } : w;
-      const payloadEntries = Object.entries(target.payload ?? {}).map(
-        ([k, source]) => `${k}: ${fieldsByName.has(source) ? `${camelCase(source)}Value` : source}`
-      );
-      return `on${capitalize(target.event)}?.({ ${payloadEntries.join(", ")} });`;
+function printHandlers(handlers: readonly Handler[], fieldsByName: ReadonlyMap<string, FieldNode>): string[] {
+  return handlers.map((h) => {
+    const calls = h.effects.map((e) => {
+      if (e.kind !== "emit") throw new Error(`printHandlers: unsupported effect kind '${e.kind}'`);
+      return printEmitEffect(e, fieldsByName);
     });
-    return `on${capitalize(childEventName)}={() => { ${calls.join(" ")} }}`;
+    return `on${capitalize(h.on)}={() => { ${calls.join(" ")} }}`;
   });
+}
 
-  const attrs = [...propAttrs, ...namedSlotAttrs, ...onAttrs];
-  const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
-  return defaultChildrenExpr !== undefined
-    ? `<${refName}${attrsStr}>{${defaultChildrenExpr}}</${refName}>`
-    : `<${refName}${attrsStr} />`;
+/**
+ * A `text` node needs `{}` braces only when it appears as a JSX element
+ * child (a bare JS string isn't valid JSX text) — as an attribute value or
+ * inside a fragment, the caller already supplies the one wrapping `{}` an
+ * attribute needs. Every other kind already prints valid JSX on its own.
+ */
+function printElementChild(node: RenderNode, fieldsByName: ReadonlyMap<string, FieldNode>): string {
+  return node.kind === "text" ? `{${printInline(node, fieldsByName)}}` : printInline(node, fieldsByName);
+}
+
+/**
+ * Prints one lowered composition subtree as a flat JSX expression string —
+ * no internal newlines; only the composed root's `visibleWhen` wrap (handled
+ * by its caller in `emitReact`) is ever multi-line. `slot` doesn't appear in
+ * a composition tree (Phase 1b's path is a distinct, non-composed one), so
+ * it isn't handled here.
+ */
+function printInline(node: RenderNode, fieldsByName: ReadonlyMap<string, FieldNode>): string {
+  switch (node.kind) {
+    case "text":
+      return JSON.stringify((node.value as Extract<Expr, { type: "literal" }>).value);
+    case "fragment": {
+      const inner = node.children.map((c) => printInline(c, fieldsByName)).join("");
+      return node.style === "explicit" ? `<React.Fragment>${inner}</React.Fragment>` : `<>${inner}</>`;
+    }
+    case "when": {
+      const cond = condToJs(node.cond);
+      const inner = node.then.map((c) => printInline(c, fieldsByName)).join("");
+      return `{${cond} && ${inner}}`;
+    }
+    case "element": {
+      const staticAttrs = node.attrs.map((a) => {
+        if (a.kind !== "static") throw new Error(`printInline: unsupported attr kind '${a.kind}'`);
+        return `${a.name}=${JSON.stringify(a.value)}`;
+      });
+      let dynamicAttrs: string[] = [];
+      if (node.tag === "input") {
+        const nameAttr = node.attrs.find((a) => a.kind === "static" && a.name === "name");
+        const camel = camelCase((nameAttr as Extract<typeof nameAttr, { kind: "static" }>).value);
+        const Camel = capitalize(camel);
+        dynamicAttrs = [`value={${camel}Value}`, `onChange={handle${Camel}Change}`, `aria-invalid={${camel}Touched && !${camel}Valid}`];
+      }
+      const attrsStr = [...staticAttrs, ...dynamicAttrs].join(" ");
+      if (node.children.length === 0) return `<${node.tag} ${attrsStr} />`;
+      const inner = node.children.map((c) => printElementChild(c, fieldsByName)).join("");
+      return `<${node.tag} ${attrsStr}>${inner}</${node.tag}>`;
+    }
+    case "instance": {
+      const refName = pascalCase(node.component.name);
+      const refSlots = node.component.declarations.filter((d) => d.kind === "slot");
+
+      const propAttrs = Object.entries(node.props).map(([k, expr]) => `${k}={${printPropExpr(expr)}}`);
+
+      const namedSlotAttrs: string[] = [];
+      let defaultChildrenExpr: string | undefined;
+      for (const slot of refSlots) {
+        const fillNodes = node.fills[slot.name];
+        if (!fillNodes) continue;
+        const rendered = fillNodes.map((n) => printInline(n, fieldsByName)).join("");
+        if (slot.name === "default") defaultChildrenExpr = rendered;
+        else namedSlotAttrs.push(`${slotPropName(slot.name)}={${rendered}}`);
+      }
+
+      const onAttrs = printHandlers(node.handlers, fieldsByName);
+
+      const attrs = [...propAttrs, ...namedSlotAttrs, ...onAttrs];
+      const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+      return defaultChildrenExpr !== undefined
+        ? `<${refName}${attrsStr}>{${defaultChildrenExpr}}</${refName}>`
+        : `<${refName}${attrsStr} />`;
+    }
+    default:
+      throw new Error(`printInline: unsupported render node kind '${node.kind}'`);
+  }
 }
 
 /**
@@ -268,14 +300,18 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   if (component.transitions.length > 0) lines.push(`      onClick={() => dispatch("click")}`);
   lines.push(`    >`);
   if (rootUses) {
-    const byName = new Map(component.composition.map((n) => [n.name, n] as const));
-    const composedJsx = renderUsesJsx(rootUses, byName, fieldsByName);
-    if (rootUses.visibleWhen) {
-      lines.push(`      {${rootUses.visibleWhen} && (`);
-      lines.push(`        ${composedJsx}`);
+    // `visibleWhen`'s multi-line/parenthesized wrap is special-cased here,
+    // at the composed root only — everywhere else `when` prints as a flat
+    // inline `{cond && child}` (see `printInline`'s `"when"` case), matching
+    // today's actual formatting exactly (the whole tree below the root is
+    // built as one unbroken string; only the root wrap ever spans lines).
+    const tree = lowerComposition(rootUses, component);
+    if (tree.kind === "when") {
+      lines.push(`      {${condToJs(tree.cond)} && (`);
+      lines.push(`        ${printInline(tree.then[0]!, fieldsByName)}`);
       lines.push(`      )}`);
     } else {
-      lines.push(`      ${composedJsx}`);
+      lines.push(`      ${printInline(tree, fieldsByName)}`);
     }
   } else {
     lines.push(...printRenderNodes(lower(component), component.name, styledParts));

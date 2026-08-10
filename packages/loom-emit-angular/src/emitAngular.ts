@@ -1,16 +1,18 @@
-import type { ComponentNode, EmittedFile, EventNode, FieldNode, PropNode, RenderNode, UsesNode } from "loom-ir";
-import { lower } from "loom-ir";
+import type { Attr, ComponentNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode } from "loom-ir";
+import { lower, lowerComposition } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import {
   capitalize,
   camelCase,
   collectReferencedComponents,
+  condToJs,
   hasComputedProps,
   isComputedPropValue,
   loomTypeToTs,
   machineLines,
   pascalCase,
 } from "loom-emit-core";
+import type { Expr } from "loom-expr";
 
 /**
  * Prints the render tree `lower()` produces for the non-composition path.
@@ -62,80 +64,119 @@ function angularBinding(key: string, value: unknown): string {
   return typeof value === "string" ? `[${key}]="'${value.replace(/'/g, "\\'")}'"` : `[${key}]="${JSON.stringify(value)}"`;
 }
 
-/**
- * A native `<input>` bound to this field's own class members — `value`/
- * `touched` are set together by the generated `on<Name>Input` method, the
- * derived `<name>Valid` getter is referenced directly (Angular templates
- * can evaluate a class getter but never an imported function), and the
- * invalid message (if any) only shows once the field has been touched,
- * via `*ngIf`.
- */
-function renderFieldTemplate(field: FieldNode): string {
-  const camel = camelCase(field.name);
-  const Camel = capitalize(camel);
-  const inputType = field.secret ? "password" : "text";
-  const parts = [
-    `<input type="${inputType}" name="${field.name}" [value]="${camel}" (input)="on${Camel}Input($event)" [attr.aria-invalid]="${camel}Touched && !${camel}Valid" />`,
-  ];
-  if (field.invalidMessage) {
-    parts.push(
-      `<span *ngIf="${camel}Touched && !${camel}Valid" data-loom-field-error="${field.name}">${escapeHtml(field.invalidMessage)}</span>`
-    );
-  }
-  return parts.join("");
+function printPropAttr(k: string, expr: Expr, instanceName: string): string {
+  return expr.type === "literal" ? angularBinding(k, expr.value) : `[${k}]="${computedPropGetterName(instanceName, k)}"`;
 }
 
 /**
- * Recursively renders one `UsesNode` (and, through `slotContent.*.uses`/
- * `slotContent.*.fields`, its nested children/native fields) as an Angular
- * template fragment. Unlike React, a resolved child's named slots are
- * `<ng-content select="[slot=name]">` projections against light-DOM markup,
- * so slot content becomes `<div slot="name">...</div>` children — never
- * attributes. A `{ expr }` prop value can't be evaluated inline (Angular
- * templates can't call an imported function), so it binds to a named class
- * getter instead. `on` wiring becomes one or more real Angular output-
- * binding statements targeting the already-generated `@Output()` member(s)
- * on *this* component — bare-string sugar keeps forwarding `$event`
- * untouched (today's only shape, still valid), while an explicit
- * `{ event, payload }` target constructs its payload from sibling field/prop
- * class members (referenced bare, the way any template expression reaches a
- * class member).
+ * `payload: "forward"` (bare-string `on` sugar, lowered) forwards whatever
+ * the child emitted — Angular's `$event` genuinely can carry that, unlike
+ * React's callback-only model, so this backend honors it rather than
+ * discarding it (see `printEmitEffect` in `loom-emit-react` for the
+ * opposite, currently-divergent choice — unifying the two is Phase 1d's
+ * job). A constructed payload references its source bare — Angular
+ * template expressions reach a class member directly, field or prop alike,
+ * with no naming distinction the way React's `Value`-suffixed state does.
  */
-function renderUsesTemplate(node: UsesNode, byName: ReadonlyMap<string, UsesNode>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
-  const ref = node.resolvedComponent;
-  const selector = `loom-${ref.name}`;
-  const refSlots = ref.declarations.filter((d) => d.kind === "slot");
+function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "emit" }>): string {
+  if (effect.payload === "forward") return `${effect.event}.emit($event)`;
+  const payloadEntries = Object.entries(effect.payload).map(([k, expr]) => `${k}: ${(expr as Extract<Expr, { type: "ref" }>).name}`);
+  return `${effect.event}.emit({ ${payloadEntries.join(", ")} })`;
+}
 
-  const propAttrs = Object.entries(node.props ?? {}).map(([k, v]) =>
-    isComputedPropValue(v) ? `[${k}]="${computedPropGetterName(node.name, k)}"` : angularBinding(k, v)
-  );
+function printHandlers(handlers: readonly Handler[]): string[] {
+  return handlers.map((h) => {
+    const calls = h.effects.map((e) => {
+      if (e.kind !== "emit") throw new Error(`printHandlers: unsupported effect kind '${e.kind}'`);
+      return printEmitEffect(e);
+    });
+    return `(${h.on})="${calls.join("; ")}"`;
+  });
+}
+
+/**
+ * `extraAttrsFirst` exists for exactly one caller: `printWhen`, when a
+ * `when` wraps a single element (a field's error span) — Angular attaches
+ * `*ngIf` as an attribute on that element directly rather than wrapping it,
+ * unlike an `instance`, which always gets a real `<ng-container>` wrapper
+ * (an element has no separate "outer" tag to wrap with; an instance's own
+ * tag already exists to carry other bindings).
+ */
+function printElement(node: Extract<RenderNode, { kind: "element" }>, extraAttrsFirst: string[] = []): string {
+  const staticAttrs = node.attrs.map((a) => {
+    if (a.kind !== "static") throw new Error(`printElement: unsupported attr kind '${a.kind}'`);
+    return `${a.name}="${a.value}"`;
+  });
+  let dynamicAttrs: string[] = [];
+  if (node.tag === "input") {
+    const nameAttr = node.attrs.find((a) => a.kind === "static" && a.name === "name") as Extract<Attr, { kind: "static" }>;
+    const camel = camelCase(nameAttr.value);
+    const Camel = capitalize(camel);
+    dynamicAttrs = [`[value]="${camel}"`, `(input)="on${Camel}Input($event)"`, `[attr.aria-invalid]="${camel}Touched && !${camel}Valid"`];
+  }
+  const attrsStr = [...extraAttrsFirst, ...staticAttrs, ...dynamicAttrs].join(" ");
+  if (node.children.length === 0) return `<${node.tag} ${attrsStr} />`;
+  return `<${node.tag} ${attrsStr}>${node.children.map(printInline).join("")}</${node.tag}>`;
+}
+
+function printInstance(node: Extract<RenderNode, { kind: "instance" }>): string {
+  const selector = `loom-${node.component.name}`;
+  const refSlots = node.component.declarations.filter((d) => d.kind === "slot");
+
+  const propAttrs = Object.entries(node.props).map(([k, expr]) => printPropAttr(k, expr, node.name));
 
   const body: string[] = [];
   for (const slot of refSlots) {
-    const content = node.slotContent?.[slot.name];
-    if (!content) continue;
-    const inner =
-      "text" in content
-        ? escapeHtml(content.text)
-        : "uses" in content
-          ? content.uses.map((n) => renderUsesTemplate(byName.get(n)!, byName, fieldsByName)).join("")
-          : content.fields.map((n) => renderFieldTemplate(fieldsByName.get(n)!)).join("");
+    const fillNodes = node.fills[slot.name];
+    if (!fillNodes) continue;
+    const inner = fillNodes.map(printInline).join("");
     body.push(slot.name === "default" ? inner : `<div slot="${slot.name}">${inner}</div>`);
   }
 
-  const onAttrs = Object.entries(node.on ?? {}).map(([childEventName, wireRaw]) => {
-    const wires = Array.isArray(wireRaw) ? wireRaw : [wireRaw];
-    const calls = wires.map((w) => {
-      if (typeof w === "string") return `${w}.emit($event)`;
-      const payloadEntries = Object.entries(w.payload ?? {}).map(([k, source]) => `${k}: ${source}`);
-      return `${w.event}.emit({ ${payloadEntries.join(", ")} })`;
-    });
-    return `(${childEventName})="${calls.join("; ")}"`;
-  });
-
-  const attrs = [...propAttrs, ...onAttrs];
+  const attrs = [...propAttrs, ...printHandlers(node.handlers)];
   const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
   return `<${selector}${attrsStr}>${body.join("")}</${selector}>`;
+}
+
+/**
+ * See `printElement`'s doc comment for the element-vs-instance distinction.
+ * The generic multi-child `<ng-container>` fallback is defensive — no
+ * current example produces a `when` whose `then` isn't a single element or
+ * a single instance.
+ */
+function printWhen(node: Extract<RenderNode, { kind: "when" }>): string {
+  const condJs = condToJs(node.cond);
+  const only = node.then.length === 1 ? node.then[0]! : undefined;
+  if (only?.kind === "instance") return `<ng-container *ngIf="${condJs}">${printInstance(only)}</ng-container>`;
+  if (only?.kind === "element") return printElement(only, [`*ngIf="${condJs}"`]);
+  return `<ng-container *ngIf="${condJs}">${node.then.map(printInline).join("")}</ng-container>`;
+}
+
+/**
+ * Prints one lowered composition subtree as Angular template markup. Unlike
+ * React, this needs no root/nested distinction — Angular's whole template
+ * is always one flat string, so `visibleWhen` (lowered to a root-wrapping
+ * `when`) prints through the exact same path as a nested field-error `when`.
+ * `slot` doesn't appear in a composition tree (Phase 1b's path is distinct),
+ * so it isn't handled here. `fragment.style` is ignored entirely — Angular
+ * has no wrapper syntax for either style, unlike React; both print as bare
+ * concatenation.
+ */
+function printInline(node: RenderNode): string {
+  switch (node.kind) {
+    case "text":
+      return escapeHtml(String((node.value as Extract<Expr, { type: "literal" }>).value));
+    case "fragment":
+      return node.children.map(printInline).join("");
+    case "when":
+      return printWhen(node);
+    case "element":
+      return printElement(node);
+    case "instance":
+      return printInstance(node);
+    default:
+      throw new Error(`printInline: unsupported render node kind '${node.kind}'`);
+  }
 }
 
 /** `ngOnChanges` body firing every declared event whose `firesWhen` prop transitions to its target value — never on the initial mount. */
@@ -208,7 +249,6 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   const usesNgIf = !!rootUses?.visibleWhen;
   const hasFiresWhen = events.some((e) => e.firesWhen);
   const fields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
-  const fieldsByName = new Map(fields.map((f) => [f.name, f] as const));
   const needsEvaluate = fields.length > 0 || hasComputedProps(component.composition);
 
   const coreImports = ["Component", "EventEmitter", "Input", "Output"];
@@ -245,14 +285,11 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   // `<div slot="name">` markup the consumer provides. The selector-less
   // `<ng-content>` for a "default" slot is emitted last so it only picks up
   // whatever the named selectors didn't already claim.
-  let templateBody: string;
-  if (rootUses) {
-    const byName = new Map(component.composition.map((n) => [n.name, n] as const));
-    const composed = renderUsesTemplate(rootUses, byName, fieldsByName);
-    templateBody = rootUses.visibleWhen ? `<ng-container *ngIf="${rootUses.visibleWhen}">${composed}</ng-container>` : composed;
-  } else {
-    templateBody = printRenderNodes(lower(component));
-  }
+  // Unlike React, `visibleWhen` needs no special casing here: it's lowered
+  // into the same `when` node a nested field-error gets, and `printInline`
+  // handles both identically (see its doc comment for why that's safe here
+  // but not for React).
+  const templateBody = rootUses ? printInline(lowerComposition(rootUses, component)) : printRenderNodes(lower(component));
   const template = `<div ${attrs.join(" ")}>${templateBody}</div>`;
 
   const importsArr = [...referencedComponents.map((c) => `${pascalCase(c.name)}Component`), ...(usesNgIf ? ["NgIf"] : [])];
