@@ -22,6 +22,47 @@ export function lower(component: ComponentNode): RenderNode[] {
     .map((slot): RenderNode => ({ kind: "slot", name: slot.name }));
 }
 
+/**
+ * Lowers a component's own root-element interaction wiring — every
+ * machine transition's trigger (dispatching that trigger's own name) and
+ * every declared event's own `trigger` (emitting that event with an empty
+ * payload) — to `Handler`s, grouped by DOM trigger name so two things
+ * reacting to the same trigger (a transition *and* a declared event both
+ * wired to `click`, say) print as one handler, not two competing ones on
+ * the same attribute.
+ *
+ * Both a `ComponentNode`'s composed and non-composed root use this — it
+ * reads only `declarations`/`transitions`, nothing about the render tree,
+ * so it applies uniformly regardless of which lowering path the rest of
+ * the component takes.
+ *
+ * Only a `kind: "event"` trigger (a named DOM event) is handled — the only
+ * kind any current machine transition or `EventNode.trigger` actually
+ * uses; `key`/`pointer` triggers stay declarable but produce no handler,
+ * same as before this function existed (real keyboard triggers are
+ * separate, not-yet-started work).
+ */
+export function lowerRootHandlers(component: ComponentNode): Handler[] {
+  const effectsByTrigger = new Map<string, Effect[]>();
+  const push = (triggerName: string, effect: Effect): void => {
+    effectsByTrigger.set(triggerName, [...(effectsByTrigger.get(triggerName) ?? []), effect]);
+  };
+
+  const dispatchedTriggerNames = new Set<string>();
+  for (const t of component.transitions) {
+    if (t.trigger.kind === "event") dispatchedTriggerNames.add(t.trigger.name);
+  }
+  for (const name of dispatchedTriggerNames) push(name, { kind: "dispatch", event: name });
+
+  for (const decl of component.declarations) {
+    if (decl.kind === "event" && decl.trigger?.kind === "event") {
+      push(decl.trigger.name, { kind: "emit", event: decl.name, payload: {} });
+    }
+  }
+
+  return [...effectsByTrigger.entries()].map(([on, effects]) => ({ on, effects }));
+}
+
 function isComputedPropValue(v: PropValue): v is { expr: Expr } {
   return v !== null && typeof v === "object" && !Array.isArray(v) && "expr" in v;
 }

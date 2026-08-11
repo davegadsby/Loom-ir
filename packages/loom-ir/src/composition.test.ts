@@ -228,6 +228,41 @@ describe("checkComposition", () => {
     expect(() => checkComposition(widget)).not.toThrow();
   });
 
+  it("accepts a declared event with a trigger and an empty payloadType", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/press", kind: "event", origin: "own", assertable: false, name: "press", payloadType: { kind: "record", fields: {} }, trigger: { kind: "event", name: "click" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when a triggered event's payloadType is not record{}", () => {
+    const widget = makeWidget({
+      declarations: [
+        {
+          id: "widget/declarations/press",
+          kind: "event",
+          origin: "own",
+          assertable: false,
+          name: "press",
+          payloadType: { kind: "record", fields: { x: { kind: "string" } } },
+          trigger: { kind: "event", name: "click" },
+        },
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/trigger but its payloadType is not 'record{}'/);
+  });
+
+  it("throws when a triggered event's payloadType is a non-record type", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/press", kind: "event", origin: "own", assertable: false, name: "press", payloadType: { kind: "string" }, trigger: { kind: "event", name: "click" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/trigger but its payloadType is not 'record{}'/);
+  });
+
   const username: FieldNode = {
     id: "widget/declarations/username",
     kind: "field",

@@ -21,6 +21,7 @@ export function Button(props: ButtonProps): React.ReactElement {
       className="loom-button"
       role="button"
       aria-disabled={disabled}
+      onClick={() => { onPress?.({  }); }}
     >
       {children}
     </div>

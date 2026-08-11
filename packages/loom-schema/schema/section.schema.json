@@ -64,6 +64,10 @@
             "becomes": {}
           },
           "description": "Auto-fires this event whenever the named prop's value changes to equal `becomes` (never on initial mount)."
+        },
+        "trigger": {
+          "$ref": "#/$defs/trigger",
+          "description": "Fires this event directly off a DOM trigger on this component's own root element — payloadType must be record{} (checked by checkComposition)."
         }
       }
     },

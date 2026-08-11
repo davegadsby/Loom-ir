@@ -36,7 +36,7 @@ describe("full pipeline integration (checkbox archetype)", () => {
       expect(reactFile!.contents).toContain(marker);
       expect(angularFile!.contents).toContain(marker);
     }
-    expect(reactFile!.contents).toContain('onClick={() => dispatch("click")}');
+    expect(reactFile!.contents).toContain('onClick={() => { dispatch("click"); }}');
     expect(angularFile!.contents).toContain(`(click)="dispatch('click')"`);
   });
 

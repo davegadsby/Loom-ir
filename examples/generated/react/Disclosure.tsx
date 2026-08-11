@@ -55,7 +55,7 @@ export function Disclosure(props: DisclosureProps): React.ReactElement {
       data-state={state}
       role="disclosure"
       aria-disabled={disabled}
-      onClick={() => dispatch("click")}
+      onClick={() => { dispatch("click"); }}
     >
       <div data-loom-slot="trigger">{trigger}</div>
       <div data-loom-slot="panel">{panel}</div>

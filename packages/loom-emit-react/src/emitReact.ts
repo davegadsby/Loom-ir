@@ -1,5 +1,5 @@
 import type { ComponentNode, EmittedFile, FieldNode, Handler, PropNode, RenderNode } from "loom-ir";
-import { lower, lowerComposition } from "loom-ir";
+import { lower, lowerComposition, lowerRootHandlers } from "loom-ir";
 import type { Expr, LoomType } from "loom-expr";
 import { partClassName } from "loom-emit-styles";
 import {
@@ -92,9 +92,8 @@ function printPropExpr(expr: Expr, valueType: LoomType, boundIdents: readonly st
 }
 
 /**
- * `emit` is the only effect kind composition lowers to yet. A field-sourced
- * payload value carries a `Value` suffix (React's field state variable is
- * named `<name>Value`); a prop-sourced one prints as-is.
+ * A field-sourced payload value carries a `Value` suffix (React's field
+ * state variable is named `<name>Value`); a prop-sourced one prints as-is.
  */
 function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "emit" }>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
   const payloadEntries = Object.entries(effect.payload).map(([k, expr]) => {
@@ -104,12 +103,22 @@ function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "em
   return `on${capitalize(effect.event)}?.({ ${payloadEntries.join(", ")} });`;
 }
 
+/**
+ * `dispatch` calls the same root-scoped `const dispatch = ...` closure
+ * `emitReact`'s main function defines whenever the component has a
+ * machine — always in scope by the time a `dispatch` effect can exist,
+ * since `lowerRootHandlers` only ever produces one from an actual
+ * `TransitionNode.trigger`.
+ */
+function printEffect(effect: Handler["effects"][number], fieldsByName: ReadonlyMap<string, FieldNode>): string {
+  if (effect.kind === "dispatch") return `dispatch(${JSON.stringify(effect.event)});`;
+  if (effect.kind !== "emit") throw new Error(`printEffect: unsupported effect kind '${effect.kind}'`);
+  return printEmitEffect(effect, fieldsByName);
+}
+
 function printHandlers(handlers: readonly Handler[], fieldsByName: ReadonlyMap<string, FieldNode>): string[] {
   return handlers.map((h) => {
-    const calls = h.effects.map((e) => {
-      if (e.kind !== "emit") throw new Error(`printHandlers: unsupported effect kind '${e.kind}'`);
-      return printEmitEffect(e, fieldsByName);
-    });
+    const calls = h.effects.map((e) => printEffect(e, fieldsByName));
     return `on${capitalize(h.on)}={() => { ${calls.join(" ")} }}`;
   });
 }
@@ -376,7 +385,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   if (component.states.length > 0) lines.push(`      data-state={state}`);
   if (pattern) lines.push(`      role=${JSON.stringify(pattern.pattern)}`);
   if (disabledProp) lines.push(`      aria-disabled={disabled}`);
-  if (component.transitions.length > 0) lines.push(`      onClick={() => dispatch("click")}`);
+  for (const attr of printHandlers(lowerRootHandlers(component), fieldsByName)) lines.push(`      ${attr}`);
   lines.push(`    >`);
   if (rootUses) {
     // `visibleWhen`'s multi-line/parenthesized wrap is special-cased here,

@@ -172,22 +172,29 @@ describe("TaskList — each: one rendered instance per element of a list-typed p
   });
 });
 
-describe("known defects in the current compiler", () => {
-  it.fails("Button should invoke onPress when clicked, but emits no click handler at all", () => {
+describe("real triggers — EventNode.trigger fires a declared event off its own root click, no machine required", () => {
+  // Formerly four it.fails tripwires (Phase 0 through Phase 4), all sharing one root cause:
+  // Button has no state machine, and only a machine-backed transition ever got a click handler
+  // wired up — so Button's own `press` event never fired, and everything composed on top of it
+  // (ConfirmationDialog/LoginDialog/SignupDialog's own composed Button/submit-button) never saw
+  // a press to react to. `button.md`'s `press` event now declares `trigger: { kind: event, name:
+  // click }`, which `lowerRootHandlers` turns into a real click handler — fixing all four at once.
+
+  it("Button invokes onPress when clicked", () => {
     let pressed = false;
     const { getByRole } = render(<Button onPress={() => { pressed = true; }}>Go</Button>);
     fireEvent.click(getByRole("button"));
     expect(pressed).toBe(true);
   });
 
-  it.fails("ConfirmationDialog should fire onClosed when Confirm is pressed — its entire stated behavior", () => {
+  it("ConfirmationDialog fires onClosed when Confirm is pressed", () => {
     let closed = false;
     const { container } = render(<ConfirmationDialog open onClosed={() => { closed = true; }} />);
     fireEvent.click(container.querySelector('[data-loom-component="button"]')!);
     expect(closed).toBe(true);
   });
 
-  it.fails("LoginDialog should fire onLogin with the typed credentials when Login is pressed", () => {
+  it("LoginDialog fires onLogin with the typed credentials when Login is pressed", () => {
     const seen: Array<{ username: string; password: string }> = [];
     const { container } = render(<LoginDialog onLogin={(p) => seen.push(p)} />);
 
@@ -200,7 +207,7 @@ describe("known defects in the current compiler", () => {
     expect(seen).toEqual([{ username: "a@b.co", password: "longenough" }]);
   });
 
-  it.fails("SignupDialog should fire onSubscribed with the typed email when Submit is pressed — same root cause as the other two", () => {
+  it("SignupDialog fires onSubscribed with the typed email when Submit is pressed", () => {
     const seen: Array<{ email: string }> = [];
     const { container } = render(<SignupDialog onSubscribed={(p) => seen.push(p)} />);
 

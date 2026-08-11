@@ -56,6 +56,14 @@ export function checkComposition(component: ComponentNode): void {
         );
       }
     }
+    if (decl.kind === "event" && decl.trigger) {
+      const fieldCount = decl.payloadType.kind === "record" ? Object.keys(decl.payloadType.fields).length : 1;
+      if (fieldCount > 0) {
+        throw new CompositionCheckError(
+          `event '${decl.id}' has a trigger but its payloadType is not 'record{}' — a trigger-fired event's payload is always empty`
+        );
+      }
+    }
     if (decl.kind === "field" && decl.validate) {
       let resultType: LoomType;
       try {

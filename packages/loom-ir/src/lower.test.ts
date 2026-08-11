@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { lower, lowerComposition } from "./lower.js";
+import { lower, lowerComposition, lowerRootHandlers } from "./lower.js";
 import { makeCheckboxFixture } from "./testFixtures.js";
-import type { ComponentNode, FieldNode, SlotNode, UsesNode } from "./nodes.js";
+import type { ComponentNode, EventNode, FieldNode, SlotNode, UsesNode } from "./nodes.js";
 import type { RenderNode } from "./render.js";
 
 function withSlots(...names: string[]): ComponentNode {
@@ -325,5 +325,62 @@ describe("lowerComposition — each (iteration)", () => {
     expect(each.body[0]).toMatchObject({ kind: "instance", name: "item-template" });
     if (each.body[0]!.kind !== "instance") throw new Error("unreachable");
     expect(each.body[0]!.props.label).toEqual({ type: "member", target: { type: "ref", name: "task" }, property: "label" });
+  });
+});
+
+describe("lowerRootHandlers", () => {
+  it("returns nothing for a component with no machine and no triggered events", () => {
+    const noMachine: ComponentNode = { ...makeCheckboxFixture(), states: [], transitions: [] };
+    expect(lowerRootHandlers(noMachine)).toEqual([]);
+  });
+
+  it("lowers a machine transition's trigger to a dispatch effect, grouped by trigger name", () => {
+    const handlers = lowerRootHandlers(makeCheckboxFixture());
+    expect(handlers).toEqual([{ on: "click", effects: [{ kind: "dispatch", event: "click" }] }]);
+  });
+
+  it("lowers a declared event's own trigger to an empty-payload emit effect — no machine needed", () => {
+    const press: EventNode = {
+      id: "button/declarations/press",
+      kind: "event",
+      origin: "own",
+      assertable: false,
+      name: "press",
+      payloadType: { kind: "record", fields: {} },
+      trigger: { kind: "event", name: "click" },
+    };
+    const noMachine: ComponentNode = { ...makeCheckboxFixture(), states: [], transitions: [], declarations: [press] };
+    expect(lowerRootHandlers(noMachine)).toEqual([{ on: "click", effects: [{ kind: "emit", event: "press", payload: {} }] }]);
+  });
+
+  it("merges a machine dispatch and a triggered event sharing the same trigger name into one handler", () => {
+    const opened: EventNode = {
+      id: "widget/declarations/opened",
+      kind: "event",
+      origin: "own",
+      assertable: false,
+      name: "opened",
+      payloadType: { kind: "record", fields: {} },
+      trigger: { kind: "event", name: "click" },
+    };
+    const withBoth: ComponentNode = { ...makeCheckboxFixture(), declarations: [...makeCheckboxFixture().declarations, opened] };
+    const handlers = lowerRootHandlers(withBoth);
+    expect(handlers).toEqual([
+      { on: "click", effects: [{ kind: "dispatch", event: "click" }, { kind: "emit", event: "opened", payload: {} }] },
+    ]);
+  });
+
+  it("does not produce a handler for a key/pointer trigger — declarable but inert, same as before this existed", () => {
+    const keyTriggered: EventNode = {
+      id: "widget/declarations/activated",
+      kind: "event",
+      origin: "own",
+      assertable: false,
+      name: "activated",
+      payloadType: { kind: "record", fields: {} },
+      trigger: { kind: "key", key: "Enter" },
+    };
+    const noMachine: ComponentNode = { ...makeCheckboxFixture(), states: [], transitions: [], declarations: [keyTriggered] };
+    expect(lowerRootHandlers(noMachine)).toEqual([]);
   });
 });

@@ -28,6 +28,21 @@ export interface EventNode extends LoomNodeEnvelope {
   payloadType: LoomType;
   /** Auto-fires this event whenever the named prop's value changes to equal `becomes` (never on initial mount). */
   firesWhen?: { prop: string; becomes: LoomValue };
+  /**
+   * Fires this event directly off a DOM trigger on this component's own
+   * root element — the same `Trigger` shape a `TransitionNode` uses, so a
+   * plain (machine-less) leaf like `button` can declare "`press` fires on
+   * click" without needing a whole machine just to react to one
+   * interaction. Only a `kind: "event"` trigger (a named DOM event, the
+   * only kind any current example's machine trigger uses either) is wired
+   * up by either emitter today — `key`/`pointer` stay declarable but inert,
+   * same as before this field existed; real keyboard triggers are
+   * out-of-scope, separate work. Payload is always empty (`{}`) — a
+   * triggered event's own `payloadType` must therefore be `record{}` with
+   * no fields (checked by `checkComposition`); sourcing a real payload
+   * from DOM/component state is a bigger mechanism this doesn't attempt.
+   */
+  trigger?: Trigger;
 }
 
 export interface SlotNode extends LoomNodeEnvelope {

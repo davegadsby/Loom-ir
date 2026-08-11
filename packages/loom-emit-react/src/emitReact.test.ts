@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitReact } from "./emitReact.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture, makeEachFixture } from "./fixtures.js";
+import {
+  makeFixture,
+  makeStyledFixture,
+  makeCompositionFixture,
+  makeLoginFixture,
+  makeDerivedFixture,
+  makeEachFixture,
+  makeTriggeredEventFixture,
+} from "./fixtures.js";
 
 describe("emitReact", () => {
   it("emits one PascalCase-named file per component", () => {
@@ -47,7 +55,7 @@ describe("emitReact", () => {
   it("embeds the machine and wires a generic click dispatch", () => {
     const [file] = emitReact(makeFixture());
     expect(file!.contents).toContain("__machine");
-    expect(file!.contents).toContain('onClick={() => dispatch("click")}');
+    expect(file!.contents).toContain('onClick={() => { dispatch("click"); }}');
     expect(file!.contents).toContain('"id":"unchecked"');
     expect(file!.contents).toContain('id: "toggle-on"');
   });
@@ -263,5 +271,34 @@ describe("emitReact — each (iteration)", () => {
       { key: "a", label: "Buy milk", done: false },
       { key: "b", label: "Walk dog", done: true },
     ]);
+  });
+});
+
+describe("emitReact — EventNode.trigger (real triggers, no machine required)", () => {
+  it("wires a click handler that fires the triggered event's own callback, with no machine at all", () => {
+    const [file] = emitReact(makeTriggeredEventFixture());
+    expect(file!.contents).not.toContain("__machine");
+    expect(file!.contents).not.toContain("dispatch");
+    expect(file!.contents).toContain('onClick={() => { onPress?.({  }); }}');
+  });
+
+  it("merges a machine dispatch and a triggered event that share the same DOM trigger into one handler, not two competing attributes", () => {
+    const fixture = makeFixture(); // has a machine, trigger { kind: event, name: click }
+    fixture.declarations = [
+      ...fixture.declarations,
+      {
+        id: "checkbox/declarations/activated",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "activated",
+        payloadType: { kind: "record", fields: {} },
+        trigger: { kind: "event", name: "click" },
+      },
+    ];
+    const [file] = emitReact(fixture);
+    const onClickCount = (file!.contents.match(/onClick=/g) ?? []).length;
+    expect(onClickCount).toBe(1);
+    expect(file!.contents).toContain('onClick={() => { dispatch("click"); onActivated?.({  }); }}');
   });
 });

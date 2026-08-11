@@ -52,7 +52,7 @@ export function Checkbox(props: CheckboxProps): React.ReactElement {
       data-state={state}
       role="checkbox"
       aria-disabled={disabled}
-      onClick={() => dispatch("click")}
+      onClick={() => { dispatch("click"); }}
     >
     </div>
   );

@@ -78,6 +78,15 @@ describe("validateNodeBlock", () => {
     expect(block.kind).toBe("event");
   });
 
+  it("accepts an event block with a trigger", () => {
+    const block = validateNodeBlock({
+      kind: "event",
+      payloadType: "record{}",
+      trigger: { kind: "event", name: "click" },
+    });
+    expect(block.kind).toBe("event");
+  });
+
   it("accepts a valid field block with all optional properties", () => {
     const block = validateNodeBlock({
       kind: "field",

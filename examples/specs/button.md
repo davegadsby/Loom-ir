@@ -42,9 +42,18 @@ kind: slot
 ```yaml
 kind: event
 payloadType: "record{}"
+trigger: { kind: event, name: click }
 ```
 
-Fired when the button is activated.
+Fired when the button is activated. `trigger` is what actually wires a
+click handler on Button's own root — without it (as it shipped through
+Phase 4), Button declared `press` but never fired it, since only a
+machine-backed transition ever got a click handler; Button has no
+machine at all. This is the fix for the root cause behind all three
+`it.fails` tripwires `examples/tests/render.test.tsx` has carried since
+Phase 0 — `ConfirmationDialog`'s `onClosed` and `LoginDialog`'s `onLogin`
+both only ever depended on their own composed Button correctly firing
+its own `press` first.
 
 ## Claims
 

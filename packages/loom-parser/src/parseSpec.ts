@@ -184,6 +184,7 @@ function buildDeclarationNode(componentSlug: string, block: RawNodeBlock): Decla
         name: block.slug,
         payloadType: parseTypeText(yaml.payloadType as string),
         firesWhen: yaml.firesWhen as EventNode["firesWhen"],
+        trigger: yaml.trigger as EventNode["trigger"],
       };
     case "slot":
       return { ...envelope, kind: "slot", name: block.slug };

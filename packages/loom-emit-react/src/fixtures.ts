@@ -499,3 +499,28 @@ export function makeEachFixture(): ComponentNode {
     composition: [listUses, itemTemplate],
   });
 }
+
+/**
+ * A machine-less `button`-shaped component whose one declared event fires
+ * directly off a `click` trigger — no `states`/`transitions` at all, the
+ * shape that used to never get a click handler wired up regardless of what
+ * it declared (the root cause behind all three `it.fails` tripwires in
+ * `examples/tests/render.test.tsx`, before `EventNode.trigger`/
+ * `lowerRootHandlers` existed).
+ */
+export function makeTriggeredEventFixture(): ComponentNode {
+  return makeChildComponent("press-widget", {
+    declarations: [
+      {
+        id: "press-widget/declarations/press",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "press",
+        payloadType: { kind: "record", fields: {} },
+        trigger: { kind: "event", name: "click" },
+      },
+      { id: "press-widget/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+    ],
+  });
+}

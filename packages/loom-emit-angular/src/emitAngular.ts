@@ -1,5 +1,5 @@
 import type { Attr, ComponentNode, DerivedNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode, UsesNode } from "loom-ir";
-import { lower, lowerComposition } from "loom-ir";
+import { lower, lowerComposition, lowerRootHandlers } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import {
   capitalize,
@@ -121,12 +121,16 @@ function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "em
   return `${effect.event}.emit({ ${payloadEntries.join(", ")} })`;
 }
 
+/** `dispatch` calls the same `dispatch(eventName: string): void` method the class already declares whenever it has a machine — always present by the time a `dispatch` effect can exist, since `lowerRootHandlers` only ever produces one from an actual `TransitionNode.trigger`. Single-quoted, matching this file's own template-string-literal convention (not `JSON.stringify`, which is double-quoted). */
+function printEffect(effect: Handler["effects"][number]): string {
+  if (effect.kind === "dispatch") return `dispatch('${effect.event}')`;
+  if (effect.kind !== "emit") throw new Error(`printEffect: unsupported effect kind '${effect.kind}'`);
+  return printEmitEffect(effect);
+}
+
 function printHandlers(handlers: readonly Handler[]): string[] {
   return handlers.map((h) => {
-    const calls = h.effects.map((e) => {
-      if (e.kind !== "emit") throw new Error(`printHandlers: unsupported effect kind '${e.kind}'`);
-      return printEmitEffect(e);
-    });
+    const calls = h.effects.map((e) => printEffect(e));
     return `(${h.on})="${calls.join("; ")}"`;
   });
 }
@@ -350,7 +354,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   if (hasMachine) attrs.push(`[attr.data-state]="state"`);
   if (pattern) attrs.push(`[attr.role]="'${pattern.pattern}'"`);
   if (disabledProp) attrs.push(`[attr.aria-disabled]="disabled"`);
-  if (hasMachine) attrs.push(`(click)="dispatch('click')"`);
+  attrs.push(...printHandlers(lowerRootHandlers(component)));
   // Angular projects by CSS selector against the light DOM, not by prop —
   // a named slot becomes `<ng-content select="[slot=name]">`, matching
   // `<div slot="name">` markup the consumer provides. The selector-less

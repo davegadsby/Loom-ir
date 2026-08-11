@@ -102,11 +102,20 @@ All four are checked in CI (`.github/workflows/ci.yml`).
 
 ## Known gaps (don't be surprised by these)
 
-- Generated components that have no state machine never wire up a click
-  handler at all — a machine-less component's own events currently cannot
-  fire through generated code. Tracked, not yet fixed.
+- Fixed: a machine-less component's own declared events used to never fire
+  through generated code at all (only a machine-backed transition ever got
+  a click handler). `EventNode.trigger` + `lowerRootHandlers`
+  (`packages/loom-ir/src/lower.ts`) now wire a real click handler for any
+  declared event that names a `{kind: "event", name: "click"}` trigger —
+  see `examples/specs/button.md`'s `press` event. Still not handled: a
+  *machine-driven* state change never fires a matching declared event on
+  its own (`checkbox.md`'s `change` event, e.g., is still never invoked —
+  nothing links a `TransitionNode` to which event, if any, should fire
+  when it's taken); only an event with its own explicit `trigger` does.
 - Keyboard/pointer triggers are parsed but never wired to real DOM events;
-  only a generic `click` dispatches.
+  only a `{kind: "event", name: "click"}` trigger (the only kind any
+  current example uses, for a machine transition or a declared event
+  alike) dispatches. `key`/`pointer` stay declarable but inert.
 - `loom-expr` is intentionally first-order (no user-defined functions, no
   `map`/`filter`, no way for a quantifier to range over a list-valued
   expression) — this is a deliberate design boundary, not an oversight. See
