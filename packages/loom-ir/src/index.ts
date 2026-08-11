@@ -17,7 +17,7 @@ export type {
   MachineNode,
   InvariantNode,
   PropertyNode,
-  PathNode,
+  ScenarioNode,
   UnexpressibleNode,
   ClaimNode,
   PatternConformanceNode,
@@ -47,7 +47,7 @@ export type { SectionKind } from "./id.js";
 
 export { visit, reduce, findById, allNodes, children } from "./visit.js";
 
-export { checkPath, PathCheckError } from "./paths.js";
+export { checkScenario, ScenarioCheckError } from "./scenarios.js";
 export { checkComposition, CompositionCheckError } from "./composition.js";
 
 export type { RenderNode, Attr, Handler, Effect, Scope } from "./render.js";

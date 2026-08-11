@@ -139,7 +139,7 @@ kind: unexpressible
 `login-dialog` has no `states`/`transitions` of its own — Login's
 live enablement is a `{expr}` computed prop over field-derived
 validity, and each field's error message is local render logic, not a
-transition. Neither is something the `PathNode`/`PropertyNode` claim
+transition. Neither is something the `ScenarioNode`/`PropertyNode` claim
 language (which quantifies over a `states`/`transitions` domain) can
 currently reference. Verifying "Login only enables once both fields
 are valid" and "the error message tracks live validity" end-to-end

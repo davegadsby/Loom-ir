@@ -9,7 +9,7 @@ function isComputedProp(v: PropValue): v is { expr: Expr } {
 }
 
 /**
- * Compile-time composition check (mirrors checkPath in paths.ts): a
+ * Compile-time composition check (mirrors checkScenario in scenarios.ts): a
  * Composition section must describe exactly one tree, rooted at exactly one
  * `root: true` node, with every other node claimed by exactly one ancestor's
  * `slotContent.*.uses`, and every `props`/`slotContent`/`on` key valid

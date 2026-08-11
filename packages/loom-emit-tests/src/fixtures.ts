@@ -60,7 +60,7 @@ export function makeFixture(): ComponentNode {
       },
       {
         id: "widget/claims/flip-turns-on",
-        kind: "path",
+        kind: "scenario",
         origin: "own",
         assertable: true,
         verify: "interaction",

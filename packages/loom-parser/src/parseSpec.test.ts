@@ -89,10 +89,10 @@ describe("parseSpec — checkbox (extends interactive-base)", () => {
     expect(inherited!.origin).toEqual({ inheritedFrom: "interactive-base", overridden: false });
   });
 
-  it("parses a PathNode and validates it against the machine at parse time", () => {
+  it("parses a ScenarioNode and validates it against the machine at parse time", () => {
     const checkbox = parseCheckbox();
-    const path = checkbox.claims.find((c) => c.kind === "path");
-    expect(path).toMatchObject({ from: "unchecked", to: "checked" });
+    const scenario = checkbox.claims.find((c) => c.kind === "scenario");
+    expect(scenario).toMatchObject({ from: "unchecked", to: "checked" });
   });
 
   it("parses an UnexpressibleNode from prose with no yaml block", () => {
@@ -139,10 +139,10 @@ describe("parseSpec — disclosure (extends interactive-base; covers the rest of
     expect(invariant).toMatchObject({ kind: "invariant", verify: "unit" });
   });
 
-  it("parses a PathNode validated against its own machine at parse time", () => {
+  it("parses a ScenarioNode validated against its own machine at parse time", () => {
     const disclosure = parseDisclosure();
-    const path = disclosure.claims.find((c) => c.kind === "path");
-    expect(path).toMatchObject({ from: "collapsed", to: "expanded" });
+    const scenario = disclosure.claims.find((c) => c.kind === "scenario");
+    expect(scenario).toMatchObject({ from: "collapsed", to: "expanded" });
   });
 
   it("inherits interactive-base's prop and property claim, same as checkbox does", () => {
@@ -721,7 +721,7 @@ describe("parseSpec — error handling", () => {
     expect(() => parseSpec(readExample("checkbox.md"))).toThrow(/resolveBase/);
   });
 
-  it("throws a PathCheckError-shaped error for a path that doesn't trace real transitions", () => {
+  it("throws a ScenarioCheckError-shaped error for a scenario that doesn't trace real transitions", () => {
     const badSpec = `---
 name: broken
 kind: primitive
@@ -737,10 +737,10 @@ kind: state
 
 ## Claims
 
-### bad-path
+### bad-scenario
 
 \`\`\`yaml
-kind: path
+kind: scenario
 from: only-state
 events:
   - { kind: event, name: click }

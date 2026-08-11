@@ -117,7 +117,7 @@ A naive port of a ten-section document format yields ~10 node families. Several 
 ComponentNode
 ├── Declarations   PropNode, EventNode, SlotNode, MethodNode
 ├── Machine        StateNode, TransitionNode (trigger, guard), GuardNode, RuleNode
-├── Claims         InvariantNode, PropertyNode, PathNode, UnexpressibleNode
+├── Claims         InvariantNode, PropertyNode, ScenarioNode, UnexpressibleNode
 ├── A11y           PatternConformanceNode, DeltaNode, AriaRelationNode
 └── Prose          IntentNode, RationaleNode   (non-assertable)
 ```
@@ -290,7 +290,7 @@ cannot be rendered into React.
 |---|---|---|
 | `InvariantNode` | Predicate, no free variables | One-shot unit test |
 | `PropertyNode` | `∀ x ∈ D. P(x)` — requires machine-readable domain | Sampled via fast-check |
-| `PathNode` | Start state, event sequence, expected end state | Compile-time check against machine; runtime play function |
+| `ScenarioNode` | Start state, event sequence, expected end state | Compile-time check against machine; runtime play function |
 | `UnexpressibleNode` | Prose claim, not machine-verifiable | None — counts against coverage |
 
 The invariant/property distinction survives first principles intact and sharpens: the
@@ -309,7 +309,7 @@ backend.
 |---|---|---|
 | `InvariantNode` | `emit-tests-jest` | One-shot unit test |
 | `PropertyNode` | `emit-tests-jest` + fast-check | Sampled property test |
-| `PathNode` | `emit-tests-sb` | Storybook play function |
+| `ScenarioNode` | `emit-tests-sb` | Storybook play function |
 | `PatternConformanceNode` / `DeltaNode` | `emit-tests-axe` | jest-axe check |
 | (visual) | Chromatic | Visual regression |
 
@@ -381,7 +381,7 @@ or becomes migration-only tooling.
 
 Compile-time path checking (§5.2) depends on the state machine being authoritative and
 complete. If any component needs behaviour outside the machine, either the machine model
-must expand or `PathNode` loses its compile-time guarantee. Worth confirming against the
+must expand or `ScenarioNode` loses its compile-time guarantee. Worth confirming against the
 hardest composite component before committing.
 
 ---

@@ -103,7 +103,7 @@ kind: unexpressible
 `confirmation-dialog` has no `states`/`transitions` of its own — its
 open/close behavior is expressed entirely through `open`'s `firesWhen`
 and the Confirm button's `on` wiring, neither of which the
-`PathNode`/`PropertyNode` claim language (which quantifies over a
+`ScenarioNode`/`PropertyNode` claim language (which quantifies over a
 `states`/`transitions` domain) can currently reference. Verifying
 "only Confirm closes the dialog" end-to-end would need an
 interaction-level test (Storybook play / e2e) outside this taxonomy's
