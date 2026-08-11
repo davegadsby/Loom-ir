@@ -12,9 +12,21 @@ function readStateLines(checkboxPattern: boolean): string[] {
     : [`function readState(root: Element): string {`, `  return root.getAttribute("data-state") ?? "";`, `}`];
 }
 
-function fireEventLine(event: Trigger, scenarioId: string, index: number): string {
-  if (event.kind === "event" && event.name === "click") return `    await userEvent.click(root);`;
-  if (event.kind === "key") return `    fireEvent.keyDown(root, { key: ${JSON.stringify(event.key)} });`;
+/**
+ * `viaSpaceKey` substitutes a `{kind:"event", name:"click"}` step with a
+ * focus + Space keypress instead — sound only for the checkbox pattern,
+ * where a real `<input type="checkbox">`'s native Space-activation
+ * dispatches the same `click` event a mouse would (§ `checkbox.md`'s own
+ * "Keyboard" note). A `{kind:"key"}` step is already keyboard-driven and
+ * unaffected by the flag.
+ */
+function fireEventLines(event: Trigger, scenarioId: string, index: number, viaSpaceKey: boolean): string[] {
+  if (event.kind === "event" && event.name === "click") {
+    return viaSpaceKey
+      ? [`    (root as HTMLElement).focus();`, `    await userEvent.keyboard(" ");`]
+      : [`    await userEvent.click(root);`];
+  }
+  if (event.kind === "key") return [`    fireEvent.keyDown(root, { key: ${JSON.stringify(event.key)} });`];
   throw new Error(
     `emitStorybookPlay: scenario '${scenarioId}' event #${index} has trigger kind '${event.kind}', which has no DOM mapping yet`
   );
@@ -33,20 +45,26 @@ function seedArgsLine(scenario: ScenarioNode, component: ComponentNode): string 
   return `  args: { ${seedProp.name}: true },`;
 }
 
-function storyLines(scenario: ScenarioNode, component: ComponentNode): string[] {
-  const storyName = pascalCase(scenario.id.split("/").pop()!);
+function storyLines(scenario: ScenarioNode, component: ComponentNode, viaSpaceKey: boolean): string[] {
+  const storyName = pascalCase(scenario.id.split("/").pop()!) + (viaSpaceKey ? "ViaSpaceKey" : "");
   const args = seedArgsLine(scenario, component);
+  const driveComment = viaSpaceKey
+    ? `    // Same scenario, driven via focus + Space instead of a click — sound only because a`
+    : `    // Checked structurally at compile time by loom-ir's checkScenario; this drives the`;
+  const driveComment2 = viaSpaceKey
+    ? `    // native checkbox's Space-activation dispatches the same real 'click' event a mouse would.`
+    : `    // real event sequence against a mounted, real-browser-rendered '${component.name}'.`;
   const lines = [
     `export const ${storyName}: Story = {`,
     ...(args ? [args] : []),
     `  play: async ({ canvasElement }) => {`,
     `    // [${scenario.id}] ${scenario.from} --${JSON.stringify(scenario.events)}--> ${scenario.to}`,
-    `    // Checked structurally at compile time by loom-ir's checkScenario; this drives the`,
-    `    // real event sequence against a mounted, real-browser-rendered '${component.name}'.`,
+    driveComment,
+    driveComment2,
     `    const root = canvasElement.querySelector('[data-loom-component="${component.name}"]');`,
     `    if (!root) throw new Error("scenario '${scenario.id}': no '${component.name}' root found in canvasElement");`,
     `    await expect(readState(root)).toBe(${JSON.stringify(scenario.from)});`,
-    ...scenario.events.map((event, i) => fireEventLine(event, scenario.id, i)),
+    ...scenario.events.flatMap((event, i) => fireEventLines(event, scenario.id, i, viaSpaceKey)),
     `    await expect(readState(root)).toBe(${JSON.stringify(scenario.to)});`,
     `  },`,
     `};`,
@@ -93,7 +111,10 @@ export function emitStorybookPlay(component: ComponentNode): EmittedFile[] {
     ``,
     ...readStateLines(checkboxPattern),
     ``,
-    ...scenarios.flatMap((scenario) => storyLines(scenario, component)),
+    ...scenarios.flatMap((scenario) => [
+      ...storyLines(scenario, component, false),
+      ...(checkboxPattern ? storyLines(scenario, component, true) : []),
+    ]),
   ];
 
   return [{ path: `${componentName}.stories.tsx`, contents: lines.join("\n") }];

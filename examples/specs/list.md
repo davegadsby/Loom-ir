@@ -11,6 +11,11 @@ so `task-list` has something presentational to iterate into; the
 iteration mechanism itself (`each`) belongs to the composing component,
 not to this primitive.
 
+**Keyboard.** None — `list` is a passive container, not a control; it
+declares no event of its own for anything to activate. Whatever real
+interactive elements a consumer places inside its `default` slot carry
+their own keyboard behavior independently of this component.
+
 ## Declarations
 
 ### default

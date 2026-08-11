@@ -10,6 +10,13 @@ Shared contract for any interactive component: an interaction affordance
 that can be disabled, plus the accessibility guarantee that a disabled
 state is never independently focusable.
 
+**Keyboard.** Not defined here — `interactive-base` only contracts
+`disabled`/focusability, never a concrete keyboard path. Actual keyboard
+operability comes from whichever `pattern-conformance` a consuming spec
+declares (a real `<button>`/`<input type="checkbox">` gets Enter/Space
+free from the browser; anything else needs its own explicit mechanism,
+same as `disclosure`'s trigger-slot boundary).
+
 ## Declarations
 
 ### disabled

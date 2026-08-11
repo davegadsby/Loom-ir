@@ -35,6 +35,14 @@ against this component's own props and fields, the same context an
 
 Like `login-dialog`, this component has no `Machine` section.
 
+**Keyboard.** `email` is a real `<input>` — natively Tab-reachable and
+typeable. Submit is a real `<button>` — Tab-reachable, and Enter/Space
+both activate it once `invalid` is false, same guard a mouse click would
+hit. No `<form>` wrapper, so Enter inside the field does not submit —
+same boundary `login-dialog` states for its own two fields. No
+Escape-to-close, no focus trap, same inherited boundary
+`confirmation-dialog` already states.
+
 ## Declarations
 
 ### email

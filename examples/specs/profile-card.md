@@ -28,6 +28,9 @@ one loaded item, not an arbitrary collection.
 `nonempty` used for its own `list<T>` prop, now proven for a `resource`
 instead.
 
+**Keyboard.** None — `profile-card` is a passive display, not a control;
+it declares no event of its own for anything to activate.
+
 ## Declarations
 
 ### profile

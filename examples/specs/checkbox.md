@@ -17,6 +17,15 @@ boolean prop, so that the disabled/focusable contract inherited from
 `interactive-base` and the click path below can both be expressed as
 claims about the machine, not as prose.
 
+**Keyboard.** Space toggles it — free from the browser, since the
+`checkbox` a11y pattern (§ A11y below) compiles to a real
+`<input type="checkbox">`, not a `<div role="checkbox">`. A native
+checkbox's Space-activation dispatches a real `click` event, so it drives
+the exact same `toggle-on`/`toggle-off` transitions (and is checked by the
+same `click-checks-an-unchecked-box`/`click-unchecks-a-checked-box`
+scenario claims below) as a mouse click — not a separate path needing its
+own `kind: "key"` trigger.
+
 ## Declarations
 
 ### checked

@@ -21,6 +21,19 @@ imperative action, not something a prop or event can express — and is
 left unsupported by the current component backends (§14 step 5's "skip,
 don't throw" contract) rather than forced into a shape that doesn't fit.
 
+**Keyboard.** The root itself has no `tabIndex`/keydown handler of its
+own — this component's own click toggle is wired on the root's `onClick`,
+and keyboard operability is a function of what the *consumer* supplies
+into the `trigger` slot, not something disclosure declares itself. A real,
+focusable element there (a `<button>`, typically) gets Enter/Space
+activation free from the browser exactly like `button.md` does; the
+resulting native `click` event bubbles up to this root's own handler and
+drives the same toggle a mouse click would. Filling `trigger` with a
+non-focusable element (a styled `<span>`, say) would silently produce a
+disclosure no keyboard user can operate — a consumer responsibility this
+spec can describe but not enforce, since `slotContent` is opaque markup
+from this component's own point of view.
+
 ## Declarations
 
 ### expanded

@@ -22,6 +22,15 @@ here, all open/close *behavior* lives one level up, on
 which is also the more realistic "dumb building blocks, one smart
 composite" shape for a real compound component.
 
+**Keyboard.** `dialog` itself declares no keyboard behavior — it owns no
+interaction logic of its own (Intent above), only three slots. Whatever
+real, focusable elements a consumer places in `actions` (real `<button>`s,
+same story as `disclosure`'s `trigger` slot) are Tab-reachable and
+Enter/Space-operable for free; no Escape-to-close or focus trap exists at
+this layer, on purpose, the same "dumb primitive" boundary the rest of
+this Rationale already draws — a composing component (`confirmation-dialog`
+et al.) is where that behavior would live, if it existed anywhere.
+
 ## Declarations
 
 ### title

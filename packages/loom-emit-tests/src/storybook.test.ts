@@ -59,6 +59,18 @@ describe("emitStorybookPlay", () => {
     expect(file!.contents).not.toContain("data-state");
   });
 
+  it("emits an additional ViaSpaceKey story per scenario when the a11y pattern is checkbox, driven by focus + Space instead of a click", () => {
+    const [file] = emitStorybookPlay(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain("export const FlipTurnsOnViaSpaceKey: Story = {");
+    expect(file!.contents).toContain("(root as HTMLElement).focus();");
+    expect(file!.contents).toContain('await userEvent.keyboard(" ");');
+  });
+
+  it("does not emit a ViaSpaceKey story when the a11y pattern isn't checkbox", () => {
+    const [file] = emitStorybookPlay(makeFixture());
+    expect(file!.contents).not.toContain("ViaSpaceKey");
+  });
+
   it("seeds args when a scenario doesn't start at the machine's own initial state", () => {
     const fixture = makeFixture();
     fixture.claims = [

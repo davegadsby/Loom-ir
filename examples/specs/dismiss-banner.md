@@ -13,7 +13,11 @@ mouse — the first component to declare a *keyboard* trigger
 
 ## Rationale
 
-`button.md`'s `press` already proved `EventNode.trigger` for a
+**Keyboard.** Escape dismisses it, via `dismissed`'s own
+`trigger: { kind: key, key: Escape }` (§ Declarations below) — the one
+spec in this taxonomy with real, declared keyboard behavior rather than a
+native element's free activation. `button.md`'s `press` already proved
+`EventNode.trigger` for a
 `kind: "event"` (click) trigger (§ Phase 5a) — but a real `<button>`
 already gets Enter/Space activation for free from the browser (§ Phase
 5b), so adding a redundant key trigger there would double-fire the same
