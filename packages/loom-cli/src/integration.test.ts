@@ -4,10 +4,20 @@ import { emitReact } from "loom-emit-react";
 import { emitAngular } from "loom-emit-angular";
 import { extractEmittedNodeIds, joinResults, type ResultsLedger } from "loom-results";
 import { computeEmissionCoverage, computeExpressibilityRatio, computeResultCoverage, gate } from "loom-validate";
+import { emitStorybookPlay } from "loom-emit-tests";
+import type { EmittedFile } from "loom-ir";
 import { loadComponent } from "./loadComponent.js";
 import { emitAllTests } from "./emitAllTests.js";
 
 const checkboxSpec = fileURLToPath(new URL("../../../examples/specs/checkbox.md", import.meta.url));
+
+// `emitStorybookPlay`'s output lives outside `emitAllTests`'s own bundle (it must sit next
+// to the compiled component, not a shared tests dir — see emitAllTests.ts), but this test
+// exercises emission coverage the same way `report`/`validate` really compute it, which
+// does combine the two.
+function emitAllTestsIncludingStorybook(component: Parameters<typeof emitAllTests>[0]): EmittedFile[] {
+  return [...emitAllTests(component), ...emitStorybookPlay(component)];
+}
 
 /**
  * End-to-end proof of the §3 pipeline on the checkbox archetype: spec files
@@ -47,13 +57,14 @@ describe("full pipeline integration (checkbox archetype)", () => {
     const component = loadComponent(checkboxSpec);
     const beforeJoin = JSON.stringify(component);
 
-    const testFiles = emitAllTests(component);
+    const testFiles = emitAllTestsIncludingStorybook(component);
     const emittedIds = extractEmittedNodeIds(testFiles);
 
     // Every assertable claim except the UnexpressibleNode gets a test from
     // one of the three emit-tests backends (jest/storybook/axe).
     expect(emittedIds.has("checkbox/claims/transitions-stay-within-declared-states")).toBe(true);
     expect(emittedIds.has("checkbox/claims/click-checks-an-unchecked-box")).toBe(true);
+    expect(emittedIds.has("checkbox/claims/click-unchecks-a-checked-box")).toBe(true);
     expect(emittedIds.has("checkbox/a11y/checkbox-pattern")).toBe(true);
     expect(emittedIds.has("interactive-base/claims/disabled-not-focusable")).toBe(true);
     expect(emittedIds.has("checkbox/claims/touch-latency-feels-instant")).toBe(false);
@@ -78,7 +89,7 @@ describe("full pipeline integration (checkbox archetype)", () => {
 
   it("computes coverage ratios that reflect the UnexpressibleNode dragging emission/expressibility down", () => {
     const component = loadComponent(checkboxSpec);
-    const emittedIds = extractEmittedNodeIds(emitAllTests(component));
+    const emittedIds = extractEmittedNodeIds(emitAllTestsIncludingStorybook(component));
     const ledger: ResultsLedger = {
       "checkbox/claims/transitions-stay-within-declared-states": { status: "passed", runAt: "2026-08-09T00:00:00Z" },
       "interactive-base/claims/disabled-not-focusable": { status: "passed", runAt: "2026-08-09T00:00:00Z" },
@@ -88,14 +99,15 @@ describe("full pipeline integration (checkbox archetype)", () => {
     const result = computeResultCoverage(emittedIds, ledger);
     const expressibility = computeExpressibilityRatio(component);
 
-    // 8 assertable nodes total (3 checkbox claims + 1 inherited property +
-    // 1 a11y node + 3 style nodes), 5 emitted (the 4th style node,
-    // layout-intent, and visual-conformance have no emitted-test backend).
-    expect(emission).toEqual({ total: 8, covered: 5, ratio: 0.625 });
-    // Of the 5 emitted, 2 have a recorded result.
-    expect(result).toEqual({ total: 5, covered: 2, ratio: 0.4 });
-    // 7 of 8 assertable claims are machine-verifiable; 1 is UnexpressibleNode.
-    expect(expressibility).toEqual({ total: 8, covered: 7, ratio: 0.875 });
+    // 9 assertable nodes total (4 checkbox claims — the two scenario claims,
+    // both toggle directions, plus 1 inherited property + 1 a11y node + 3
+    // style nodes), 6 emitted (the 4th style node, layout-intent, and
+    // visual-conformance have no emitted-test backend).
+    expect(emission).toEqual({ total: 9, covered: 6, ratio: 6 / 9 });
+    // Of the 6 emitted, 2 have a recorded result.
+    expect(result).toEqual({ total: 6, covered: 2, ratio: 2 / 6 });
+    // 8 of 9 assertable claims are machine-verifiable; 1 is UnexpressibleNode.
+    expect(expressibility).toEqual({ total: 9, covered: 8, ratio: 8 / 9 });
 
     expect(gate({ emission, result, expressibility }, { expressibility: 0.8 }).passed).toBe(true);
     expect(gate({ emission, result, expressibility }, { result: 0.9 }).passed).toBe(false);

@@ -151,6 +151,18 @@ to: expanded
 
 A single click on a collapsed, enabled disclosure expands it.
 
+### click-collapses-an-expanded-panel
+
+```yaml
+kind: scenario
+from: expanded
+events:
+  - { kind: event, name: click }
+to: collapsed
+```
+
+A single click on an expanded, enabled disclosure collapses it.
+
 ### transitions-stay-within-declared-states
 
 ```yaml

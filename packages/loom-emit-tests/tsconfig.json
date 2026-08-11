@@ -4,6 +4,6 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "references": [{ "path": "../loom-ir" }, { "path": "../loom-expr" }],
+  "references": [{ "path": "../loom-ir" }, { "path": "../loom-expr" }, { "path": "../loom-emit-core" }],
   "include": ["src"]
 }

@@ -103,9 +103,9 @@ describe("emitReact", () => {
     expect(file!.contents).not.toContain("dispatch");
   });
 
-  it("imports the sibling CSS file and adds className to root and a styled non-default slot", () => {
+  it("imports the CSS file from generated/styles/ and adds className to root and a styled non-default slot", () => {
     const [file] = emitReact(makeStyledFixture());
-    expect(file!.contents).toContain('import "./Checkbox.css";');
+    expect(file!.contents).toContain('import "../styles/Checkbox.css";');
     expect(file!.contents).toContain('className="loom-checkbox"');
     expect(file!.contents).toContain('<div data-loom-slot="helper-text" className="loom-checkbox__helper-text">{helperText}</div>');
   });

@@ -14,28 +14,46 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck:examples": "tsc -p examples/tsconfig.json",
-    "examples:generate": "tsx examples/regenerate.ts"
+    "examples:generate": "tsx examples/regenerate.ts",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build",
+    "storybook:test:ci": "concurrently -k -s first -n \"SB,TEST\" -c \"magenta,blue\" \"pnpm storybook:build --quiet && npx http-server storybook-static --port 6006 --silent\" \"wait-on tcp:6006 && test-storybook\""
   },
   "devDependencies": {
     "@angular/common": "^18.2.14",
     "@angular/core": "^18.2.0",
+    "@storybook/react-vite": "^10.5.7",
+    "@storybook/test-runner": "^0.24.4",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "concurrently": "^9.0.0",
+    "fast-check": "^3.22.0",
+    "http-server": "^14.1.1",
     "jsdom": "^25.0.0",
     "loom-cli": "workspace:*",
     "loom-emit-angular": "workspace:*",
     "loom-emit-react": "workspace:*",
     "loom-emit-styles": "workspace:*",
+    "loom-emit-tests": "workspace:*",
     "loom-expr": "workspace:*",
     "loom-tokens-import-figma": "workspace:*",
+    "playwright": "1.56.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "rxjs": "^7.8.0",
+    "storybook": "^10.5.7",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "wait-on": "^8.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "playwright": "1.56.1",
+      "playwright-core": "1.56.1"
+    }
   }
 }

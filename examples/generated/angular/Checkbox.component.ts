@@ -29,7 +29,7 @@ const __machine = new LoomMachine({
   selector: "loom-checkbox",
   standalone: true,
   template: `<input [attr.data-loom-component]="'checkbox'" class="loom-checkbox" type="checkbox" [checked]="state === 'checked'" [disabled]="disabled" (change)="dispatch('click')" />`,
-  styleUrls: ["./Checkbox.css"],
+  styleUrls: ["../styles/Checkbox.css"],
 })
 export class CheckboxComponent implements OnInit {
   /** interactive-base/declarations/disabled */

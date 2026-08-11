@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { extractEmittedNodeIds, readLedger, type ResultsLedger } from "loom-results";
+import { emitStorybookPlay } from "loom-emit-tests";
 import type { DesignTokens, TokensLock } from "loom-tokens";
 import {
   checkTokensLockStaleness,
@@ -39,7 +40,10 @@ export interface ValidateOutcome {
 /** `loom validate <spec>` — parse → run coverage checks → gate (§8/§10), plus optional token checks. */
 export function validateCommand(specPath: string, options: ValidateOptions = {}): ValidateOutcome {
   const component = loadComponent(specPath);
-  const emittedIds = extractEmittedNodeIds(emitAllTests(component));
+  // emitStorybookPlay is deliberately outside emitAllTests's bundle (its output must live
+  // next to the compiled component, not a shared tests dir — see emitAllTests.ts), but its
+  // scenario claims still need to count toward emission coverage here.
+  const emittedIds = extractEmittedNodeIds([...emitAllTests(component), ...emitStorybookPlay(component)]);
   const ledger: ResultsLedger = options.results ? readLedger(options.results) : {};
 
   const emission = computeEmissionCoverage(component, emittedIds);

@@ -3,7 +3,9 @@
  * says it does. Neither existing check covers this: `examplesUpToDate.test.ts`
  * compares text, and `tsc` is satisfied by the ambient `declare module "*.css"`.
  * Only a bundler resolves these paths for real — which is exactly why this went
- * unnoticed.
+ * unnoticed until Storybook's real Vite build hit it directly. Fixed by pointing
+ * both emitters' CSS references at generated/styles/ (where examples/regenerate.ts
+ * actually writes them) instead of assuming a sibling of the component.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -27,16 +29,13 @@ function componentFiles(): string[] {
 }
 
 describe("generated components' CSS imports", () => {
-  it.fails("resolve to files that actually exist", () => {
+  it("resolve to files that actually exist", () => {
     const broken: string[] = [];
     for (const file of componentFiles()) {
       for (const ref of cssRefsIn(readFileSync(file, "utf8"))) {
         if (!existsSync(resolve(dirname(file), ref))) broken.push(`${file} -> ${ref}`);
       }
     }
-    // Currently broken: the emitters declare the stylesheet a sibling of the
-    // component, while examples/regenerate.ts writes it to generated/styles/.
-    // Fixing this changes committed output, so it belongs in a reviewed commit.
     expect(broken).toEqual([]);
   });
 });
