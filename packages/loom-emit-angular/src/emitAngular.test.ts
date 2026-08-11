@@ -10,6 +10,7 @@ import {
   makeEachFixture,
   makeResourceFixture,
   makeKeyTriggeredEventFixture,
+  makeCheckboxPatternFixture,
 } from "./fixtures.js";
 
 describe("emitAngular", () => {
@@ -73,7 +74,7 @@ describe("emitAngular", () => {
 
   it("sets role from the pattern-conformance node and aria-disabled from the disabled prop", () => {
     const [file] = emitAngular(makeFixture());
-    expect(file!.contents).toContain(`[attr.role]="'checkbox'"`);
+    expect(file!.contents).toContain(`[attr.role]="'widget'"`);
     expect(file!.contents).toContain('[attr.aria-disabled]="disabled"');
   });
 
@@ -293,5 +294,35 @@ describe("emitAngular — resource (async data as list<T>, 0-or-1)", () => {
     const expr = { type: "unop" as const, op: "not" as const, expr: { type: "builtin" as const, name: "isEmpty" as const, args: [{ type: "ref" as const, name: "profile" }] } };
     expect(evaluate(expr, { profile: [] })).toBe(false);
     expect(evaluate(expr, { profile: [{ email: "a@b.co" }] })).toBe(true);
+  });
+});
+
+describe("emitAngular — checkbox pattern: a real <input type=\"checkbox\"> (§ Phase 5e)", () => {
+  it("prints a void <input> — no children, no closing tag", () => {
+    const [file] = emitAngular(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain("<input ");
+    expect(file!.contents).toContain("/>`,");
+    expect(file!.contents).not.toContain("[attr.role]");
+  });
+
+  it("binds checked to the machine state and disabled to the native attribute, not aria-disabled", () => {
+    const [file] = emitAngular(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain(`[checked]="state === 'checked'"`);
+    expect(file!.contents).not.toContain("aria-disabled");
+  });
+
+  it("binds the dispatch handler to (change), not (click) — the idiomatic native checkbox event", () => {
+    const [file] = emitAngular(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain(`(change)="dispatch('click')"`);
+    expect(file!.contents).not.toContain("(click)");
+  });
+
+  it("seeds the machine's initial state from the checked prop via ngOnInit, not a field initializer", () => {
+    const [file] = emitAngular(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain("import { Component, EventEmitter, Input, Output, OnInit } from \"@angular/core\";");
+    expect(file!.contents).toContain("implements OnInit");
+    expect(file!.contents).toContain("state: string = __machine.initialState;");
+    expect(file!.contents).toContain("ngOnInit(): void {");
+    expect(file!.contents).toContain("if (this.checked) this.state = 'checked';");
   });
 });

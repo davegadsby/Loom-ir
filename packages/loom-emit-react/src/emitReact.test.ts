@@ -11,6 +11,7 @@ import {
   makeTriggeredEventFixture,
   makeKeyTriggeredEventFixture,
   makeResourceFixture,
+  makeCheckboxPatternFixture,
 } from "./fixtures.js";
 
 describe("emitReact", () => {
@@ -69,7 +70,10 @@ describe("emitReact", () => {
     expect(file!.contents).toContain("new Transition({");
     expect(file!.contents).toContain("guard: Guard.from({");
     expect(file!.contents).not.toContain("__machine: any");
-    expect(file!.contents).toContain("React.useState<string>(__machine.initialState)");
+    // Seeded from `checked` (§ machineSeedProp — its own name matches a declared state's
+    // name), not always `__machine.initialState`: makeFixture()'s `checked` prop is exactly
+    // this shape, same as the real checkbox.md spec.
+    expect(file!.contents).toContain('React.useState<string>(checked ? "checked" : __machine.initialState)');
     expect(file!.contents).toContain("const next = __machine.dispatch(state, eventName, env);");
     expect(file!.contents).toContain("if (next) setState(next);");
     // the old inline .find()-over-raw-transitions logic is gone — LoomMachine owns it now
@@ -79,7 +83,7 @@ describe("emitReact", () => {
 
   it("sets role from the pattern-conformance node and aria-disabled from the disabled prop", () => {
     const [file] = emitReact(makeFixture());
-    expect(file!.contents).toContain('role="checkbox"');
+    expect(file!.contents).toContain('role="widget"');
     expect(file!.contents).toContain("aria-disabled={disabled}");
   });
 
@@ -337,5 +341,32 @@ describe("emitReact — resource (async data as list<T>, 0-or-1)", () => {
     const expr = { type: "unop" as const, op: "not" as const, expr: { type: "builtin" as const, name: "isEmpty" as const, args: [{ type: "ref" as const, name: "profile" }] } };
     expect(evaluate(expr, { profile: [] })).toBe(false);
     expect(evaluate(expr, { profile: [{ email: "a@b.co" }] })).toBe(true);
+  });
+});
+
+describe("emitReact — checkbox pattern: a real <input type=\"checkbox\"> (§ Phase 5e)", () => {
+  it("prints a void <input> — no children, no closing tag", () => {
+    const [file] = emitReact(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain("<input");
+    expect(file!.contents).toContain("/>");
+    expect(file!.contents).not.toContain("</input>");
+    expect(file!.contents).not.toContain('role="checkbox"');
+  });
+
+  it("binds checked to the machine state and disabled to the native attribute, not aria-disabled", () => {
+    const [file] = emitReact(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain('checked={state === "checked"}');
+    expect(file!.contents).not.toContain("aria-disabled");
+  });
+
+  it("binds the dispatch handler to onChange, not onClick — checked is a controlled prop, and React warns without an onChange handler", () => {
+    const [file] = emitReact(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain('onChange={() => { dispatch("click"); }}');
+    expect(file!.contents).not.toContain("onClick");
+  });
+
+  it("seeds the machine's initial state from the checked prop, not always the first-declared state", () => {
+    const [file] = emitReact(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain('React.useState<string>(checked ? "checked" : __machine.initialState)');
   });
 });

@@ -37,7 +37,7 @@ export interface CheckboxProps {
 
 export function Checkbox(props: CheckboxProps): React.ReactElement {
   const { disabled = false, checked = false, onChange } = props;
-  const [state, setState] = React.useState<string>(__machine.initialState);
+  const [state, setState] = React.useState<string>(checked ? "checked" : __machine.initialState);
 
   const dispatch = (eventName: string) => {
     const env: any = { disabled, checked };
@@ -46,14 +46,13 @@ export function Checkbox(props: CheckboxProps): React.ReactElement {
   };
 
   return (
-    <div
+    <input
       data-loom-component="checkbox"
       className="loom-checkbox"
-      data-state={state}
-      role="checkbox"
-      aria-disabled={disabled}
-      onClick={() => { dispatch("click"); }}
-    >
-    </div>
+      type="checkbox"
+      checked={state === "checked"}
+      disabled={disabled}
+      onChange={() => { dispatch("click"); }}
+    />
   );
 }

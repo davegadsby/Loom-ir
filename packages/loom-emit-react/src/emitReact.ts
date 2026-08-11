@@ -11,6 +11,7 @@ import {
   hasDerivedValues,
   loomTypeToTs,
   machineLines,
+  machineSeedProp,
   objectKey,
   pascalCase,
 } from "loom-emit-core";
@@ -394,8 +395,20 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(``);
   }
 
+  const isButtonPattern = pattern?.pattern === "button";
+  const isCheckboxPattern = pattern?.pattern === "checkbox";
+  const rootTag = isButtonPattern ? "button" : isCheckboxPattern ? "input" : "div";
+  // The only structural link between "a prop that mirrors current state" and "which state
+  // that is" — see `machineSeedProp`'s own doc comment. Used both to seed the initial
+  // `state` correctly (previously always `__machine.initialState`, ignoring e.g. `checked`
+  // or `expanded` entirely) and, for the checkbox pattern, to know which state means checked.
+  const seedProp = machineSeedProp(component);
+
   if (component.states.length > 0) {
-    lines.push(`  const [state, setState] = React.useState<string>(__machine.initialState);`);
+    const initialState = seedProp
+      ? `${seedProp.name} ? ${JSON.stringify(seedProp.name)} : __machine.initialState`
+      : `__machine.initialState`;
+    lines.push(`  const [state, setState] = React.useState<string>(${initialState});`);
     lines.push(``);
     lines.push(`  const dispatch = (eventName: string) => {`);
     lines.push(`    const env: any = { ${props.map((p) => p.name).join(", ")} };`);
@@ -405,25 +418,42 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(``);
   }
 
-  const isButtonPattern = pattern?.pattern === "button";
-  const rootTag = isButtonPattern ? "button" : "div";
-  const rootHandlers = lowerRootHandlers(component);
+  // A real checkbox's own `checked`/`disabled` DOM properties already convey what
+  // `data-state`/`aria-disabled` existed to express on a `<div role="checkbox">` — and
+  // React warns at runtime if a controlled `checked` input has no `onChange`, so the
+  // trigger's own dispatch handler (still semantically "click", matching the transitions'
+  // own declared trigger name — only the DOM attribute it prints under changes) binds to
+  // `onChange` here instead of `onClick`.
+  const rootHandlers = lowerRootHandlers(component).map((h) =>
+    isCheckboxPattern && h.on === "click" ? { ...h, on: "change" } : h
+  );
 
   lines.push(`  return (`);
   lines.push(`    <${rootTag}`);
   lines.push(`      data-loom-component=${JSON.stringify(component.name)}`);
   if (styledParts.has("root")) lines.push(`      className=${JSON.stringify(partClassName(component.name, "root"))}`);
-  if (component.states.length > 0) lines.push(`      data-state={state}`);
+  if (component.states.length > 0 && !isCheckboxPattern) lines.push(`      data-state={state}`);
   if (isButtonPattern) {
     lines.push(`      type="button"`);
+  } else if (isCheckboxPattern) {
+    lines.push(`      type="checkbox"`);
+    if (seedProp) lines.push(`      checked={state === ${JSON.stringify(seedProp.name)}}`);
   } else if (pattern) {
     lines.push(`      role=${JSON.stringify(pattern.pattern)}`);
   }
-  if (disabledProp) lines.push(isButtonPattern ? `      disabled={disabled}` : `      aria-disabled={disabled}`);
+  if (disabledProp) lines.push(isButtonPattern || isCheckboxPattern ? `      disabled={disabled}` : `      aria-disabled={disabled}`);
   // A keydown handler is inert on an element that can never receive focus — `tabIndex={0}`
   // is what makes a keyboard trigger honestly operable, not just declared.
   if (hasKeydownHandler(rootHandlers)) lines.push(`      tabIndex={0}`);
   for (const attr of printHandlers(rootHandlers, fieldsByName)) lines.push(`      ${attr}`);
+  if (isCheckboxPattern) {
+    // `<input>` is a void element — no children, no closing tag. Checkbox declares no
+    // slots, so there is nothing to lose by never reaching the child-printing branch below.
+    lines.push(`    />`);
+    lines.push(`  );`);
+    lines.push(`}`, ``);
+    return [{ path: `${componentName}.tsx`, contents: lines.join("\n") }];
+  }
   lines.push(`    >`);
   if (rootUses) {
     // `visibleWhen`'s multi-line/parenthesized wrap is special-cased here,

@@ -1,7 +1,27 @@
-import type { ComponentNode } from "loom-ir";
+import type { ComponentNode, PropNode } from "loom-ir";
 
 function stateLiteral(state: ComponentNode["states"][number]): string {
   return JSON.stringify({ id: state.name, ...state.flags });
+}
+
+/**
+ * Finds the one declared bool prop, if any, whose name exactly matches a
+ * declared state's own name — the only structural link this taxonomy has
+ * between "a prop that represents current state" and "which state that
+ * is" (there's no dedicated IR field for it; `checked`/`checkbox.md` and
+ * `expanded`/`disclosure.md` both happen to name their state-mirroring
+ * prop after one of the two states it can be). Used to seed a machine's
+ * initial `state` from that prop instead of always starting at
+ * `__machine.initialState` (the first-declared state), which previously
+ * silently ignored the prop entirely: a controlled native checkbox
+ * rendered `checked={true}` would still start visually unchecked. Returns
+ * `undefined` for a machine-backed component with no such prop.
+ */
+export function machineSeedProp(component: ComponentNode): PropNode | undefined {
+  const stateNames = new Set(component.states.map((s) => s.name));
+  return component.declarations.find(
+    (d): d is PropNode => d.kind === "prop" && d.valueType.kind === "bool" && stateNames.has(d.name)
+  );
 }
 
 /**

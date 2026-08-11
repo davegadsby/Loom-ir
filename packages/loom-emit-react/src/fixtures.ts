@@ -76,7 +76,13 @@ export function makeFixture(): ComponentNode {
         origin: "own",
         assertable: true,
         verify: "a11y",
-        pattern: "checkbox",
+        // Deliberately not "checkbox" — this fixture declares slots to exercise generic
+        // slot-rendering logic, and the checkbox pattern now prints a real, childless
+        // `<input type="checkbox">` (§ Phase 5e), which cannot render slots at all. A
+        // neutral pattern name keeps this fixture testing what it's actually for; the real
+        // checkbox-as-`<input>` mechanism is proven against the real spec instead (see
+        // examples/specs/checkbox.md + examples/tests/render.test.tsx).
+        pattern: "widget",
       },
     ],
     style: [],
@@ -574,6 +580,56 @@ export function makeKeyTriggeredEventFixture(): ComponentNode {
         trigger: { kind: "key", key: "Escape" },
       },
       { id: "dismiss-widget/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+    ],
+  });
+}
+
+/**
+ * A minimal, slot-free checkbox-shaped component (`checked` prop,
+ * `unchecked`/`checked` states, `pattern-conformance: checkbox`) — the
+ * exact shape the real `examples/specs/checkbox.md` has, purpose-built to
+ * unit-test the checkbox-pattern real `<input>` mechanism (§ Phase 5e) in
+ * isolation from `makeFixture`, which deliberately keeps a neutral pattern
+ * name because it *does* declare slots (a real checkbox can't).
+ */
+export function makeCheckboxPatternFixture(): ComponentNode {
+  return makeChildComponent("check-widget", {
+    declarations: [
+      {
+        id: "check-widget/declarations/checked",
+        kind: "prop",
+        origin: "own",
+        assertable: false,
+        name: "checked",
+        valueType: { kind: "bool" },
+        defaultValue: false,
+      },
+    ],
+    states: [
+      { id: "check-widget/machine/unchecked", kind: "state", origin: "own", assertable: false, name: "unchecked", flags: {} },
+      { id: "check-widget/machine/checked", kind: "state", origin: "own", assertable: false, name: "checked", flags: {} },
+    ],
+    transitions: [
+      {
+        id: "check-widget/machine/toggle",
+        kind: "transition",
+        origin: "own",
+        assertable: false,
+        name: "toggle",
+        from: "unchecked",
+        to: "checked",
+        trigger: { kind: "event", name: "click" },
+      },
+    ],
+    a11y: [
+      {
+        id: "check-widget/a11y/checkbox-pattern",
+        kind: "pattern-conformance",
+        origin: "own",
+        assertable: true,
+        verify: "a11y",
+        pattern: "checkbox",
+      },
     ],
   });
 }

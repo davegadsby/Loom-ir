@@ -118,9 +118,11 @@ All four are checked in CI (`.github/workflows/ci.yml`).
   only bind one `keydown` handler per root element. `{kind: "pointer"}`
   stays declarable but inert. Still not handled: (1) a *machine-driven*
   state change never fires a matching declared event on its own
-  (`checkbox.md`'s `change` event, e.g., is still never invoked — nothing
-  links a `TransitionNode` to which event, if any, should fire when it's
-  taken); only an event with its own explicit `trigger` does. (2) A
+  (`checkbox.md`'s own declared `change` event, e.g., is still never
+  invoked — nothing links a `TransitionNode` to which event, if any, should
+  fire when it's taken — not to be confused with the unrelated native DOM
+  `change` event Checkbox's root now binds its dispatch handler to; only an
+  event with its own explicit `trigger` does. (2) A
   *machine transition's* own `key`/`pointer` trigger is never wired to
   `dispatch` either — `LoomMachine`'s `Transition.matches` still hardcodes
   `trigger.kind === "event"` as a match requirement, so wiring one would
@@ -187,3 +189,25 @@ All four are checked in CI (`.github/workflows/ci.yml`).
   profile-card.md` for a worked example (a `profile` resource + a `loaded`
   derived value, proven via both a `property` claim and a `render.test.tsx`
   mount test).
+- Fixed: `checkbox`'s a11y pattern gets a real `<input type="checkbox">`
+  root (mirroring `button`'s real `<button>` tag, § Phase 5b), with
+  `checked`/`disabled` bound as native properties instead of
+  `data-state`/`aria-disabled`. Only the `checkbox` pattern gets this
+  treatment — every other pattern keeps its `<div role="...">` shape,
+  same scope limit Button's own tag change drew. Fixing it surfaced a
+  real, previously-invisible bug shared by every machine-backed component:
+  a machine's own `useState`/class-field `state` always seeded from
+  `__machine.initialState` (the first-declared state), silently ignoring
+  a prop like `checked`/`expanded` entirely — invisible before now because
+  neither ever had a real, browser-rendered visual to be wrong about.
+  `machineSeedProp` (`packages/loom-emit-core/src/machine.ts`) finds the
+  one declared bool prop, if any, whose name exactly matches a declared
+  state's own name — the only structural link this taxonomy has between
+  "a prop that mirrors current state" and "which state that is" — and
+  seeds from it when present; this generalizes for free to any
+  machine-backed component shaped that way, not just `checkbox`
+  (`disclosure`'s `expanded`/`collapsed`+`expanded` states get the same
+  fix, a reviewed diff with no tag change). Angular needed `ngOnInit`, not
+  a field initializer, since Angular sets `@Input()` values on the
+  instance strictly after construction — a field initializer reading
+  `this.checked` would only ever see the class's own declared default.

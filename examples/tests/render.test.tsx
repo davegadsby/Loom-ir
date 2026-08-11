@@ -25,26 +25,39 @@ import { DismissBanner } from "../generated/react/DismissBanner";
 
 afterEach(cleanup);
 
-describe("Checkbox — machine-backed interaction", () => {
+describe("Checkbox — a real <input type=\"checkbox\">, machine-backed (§ Phase 5e)", () => {
+  const checkboxInput = (c: HTMLElement) => c.querySelector("input[type='checkbox']");
+
+  it("is a real HTMLInputElement, not a div with role=\"checkbox\"", () => {
+    const { container } = render(<Checkbox />);
+    expect(checkboxInput(container)).not.toBeNull();
+    expect(container.querySelector("div[role='checkbox']")).toBeNull();
+  });
+
   it("starts in the machine's initial state", () => {
     const { getByRole } = render(<Checkbox />);
-    expect(getByRole("checkbox").getAttribute("data-state")).toBe("unchecked");
+    expect((getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("starts checked when the checked prop is true — proves the machine's initial state is seeded from it, not always the first-declared state", () => {
+    const { getByRole } = render(<Checkbox checked />);
+    expect((getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
   });
 
   it("toggles state on click, driving the embedded LoomMachine end to end", () => {
     const { getByRole } = render(<Checkbox />);
-    const el = getByRole("checkbox");
+    const el = getByRole("checkbox") as HTMLInputElement;
     fireEvent.click(el);
-    expect(el.getAttribute("data-state")).toBe("checked");
+    expect(el.checked).toBe(true);
     fireEvent.click(el);
-    expect(el.getAttribute("data-state")).toBe("unchecked");
+    expect(el.checked).toBe(false);
   });
 
   it("respects the transition guard: a disabled checkbox does not toggle", () => {
     const { getByRole } = render(<Checkbox disabled />);
-    const el = getByRole("checkbox");
+    const el = getByRole("checkbox") as HTMLInputElement;
     fireEvent.click(el);
-    expect(el.getAttribute("data-state")).toBe("unchecked");
+    expect(el.checked).toBe(false);
   });
 });
 
