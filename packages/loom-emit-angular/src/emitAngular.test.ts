@@ -147,13 +147,13 @@ describe("emitAngular — composition", () => {
 });
 
 describe("emitAngular — native fields, computed getters, on wiring", () => {
-  it("renders a FieldNode's own class members, a get <name>Valid() getter (not an inline evaluate call), and an on<Name>Input method", () => {
+  it("renders a FieldNode's own class members, a get <name>Valid() getter compiled directly (no evaluate import at all, § Phase 5f), and an on<Name>Input method", () => {
     const [file] = emitAngular(makeLoginFixture());
-    expect(file!.contents).toContain('import { evaluate } from "loom-expr";');
+    expect(file!.contents).not.toContain("loom-expr");
     expect(file!.contents).toContain('  username: string = "";');
     expect(file!.contents).toContain("  usernameTouched: boolean = false;");
     expect(file!.contents).toContain("  get usernameValid(): boolean {");
-    expect(file!.contents).toContain("{ username: this.username }) === true;");
+    expect(file!.contents).toContain('return new RegExp("^[^@]+@[^@]+$").test(this.username);');
     expect(file!.contents).toContain("  onUsernameInput(event: Event): void {");
     expect(file!.contents).toContain("this.username = (event.target as HTMLInputElement).value;");
     expect(file!.contents).toContain("this.usernameTouched = true;");
@@ -169,12 +169,12 @@ describe("emitAngular — native fields, computed getters, on wiring", () => {
     );
   });
 
-  it("emits a named getter (not an inline evaluate call in the template) for a computed prop, referenced via a property binding", () => {
+  it("emits a named getter compiled directly against this.usernameValid for a computed prop, referenced via a property binding", () => {
     const [file] = emitAngular(makeLoginFixture());
     expect(file!.contents).toContain("get loginButtonDisabled(): boolean {");
-    expect(file!.contents).toContain("{ username: this.username, usernameValid: this.usernameValid }) === true;");
+    expect(file!.contents).toContain("return !(this.usernameValid);");
     expect(file!.contents).toContain('[disabled]="loginButtonDisabled"');
-    expect(file!.contents).not.toContain('[disabled]="evaluate(');
+    expect(file!.contents).not.toContain("evaluate(");
   });
 
   it("wires a multi-target on inline as chained X.emit({...}) template statements, payload sourced from the field's own class member", () => {
@@ -184,33 +184,17 @@ describe("emitAngular — native fields, computed getters, on wiring", () => {
 });
 
 describe("emitAngular — authored derived values", () => {
-  it("emits a named getter (not an inline evaluate call in the template) computed from the field's own derived validity", () => {
+  it("emits a named getter compiled directly from the field's own derived validity — no evaluate call", () => {
     const [file] = emitAngular(makeDerivedFixture());
     expect(file!.contents).toContain("get invalid(): boolean {");
-    expect(file!.contents).toContain(
-      'return evaluate({"type":"unop","op":"not","expr":{"type":"ref","name":"emailValid"}}, { email: this.email, emailValid: this.emailValid }) === true;'
-    );
+    expect(file!.contents).toContain("return !(this.emailValid);");
   });
 
-  it("a computed-prop getter's env additionally exposes the derived value's own getter, so a composed {expr} prop can reference it by name", () => {
+  it("a computed-prop getter compiles to a bare reference to the derived value's own getter, so a composed {expr} prop can reference it by name", () => {
     const [file] = emitAngular(makeDerivedFixture());
     expect(file!.contents).toContain("get submitButtonDisabled(): boolean {");
-    expect(file!.contents).toContain(
-      'return evaluate({"type":"ref","name":"invalid"}, { email: this.email, emailValid: this.emailValid, invalid: this.invalid }) === true;'
-    );
+    expect(file!.contents).toContain("return this.invalid;");
     expect(file!.contents).toContain('[disabled]="submitButtonDisabled"');
-  });
-
-  it("the derived value's own getter and the cross-referencing getter both actually evaluate correctly (proves the emission is sound)", () => {
-    const emailValid = evaluate(
-      { type: "builtin", name: "matches", args: [{ type: "ref", name: "email" }, { type: "literal", valueType: { kind: "string" }, value: "^[^@]+@[^@]+$" }] },
-      { email: "not-an-email" }
-    );
-    const invalid = evaluate({ type: "unop", op: "not", expr: { type: "ref", name: "emailValid" } }, { email: "not-an-email", emailValid });
-    const disabled = evaluate({ type: "ref", name: "invalid" }, { email: "not-an-email", emailValid, invalid });
-    expect(emailValid).toBe(false);
-    expect(invalid).toBe(true);
-    expect(disabled).toBe(true);
   });
 });
 
@@ -233,33 +217,11 @@ describe("emitAngular — each (iteration)", () => {
     expect(file!.contents).toContain('[label]="itemTemplateLabel(task)"');
   });
 
-  it("a bool-typed template prop keeps the historical === true coercion; a non-bool one casts through loomTypeToTs instead", () => {
+  it("a template node's computed {expr} prop compiles to a bare member access on the bound ident — no evaluate call, no === true/as T coercion needed for either bool or non-bool", () => {
     const [file] = emitAngular(makeEachFixture());
-    expect(file!.contents).toContain(
-      'return evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"done"}, { ...{ tasks: this.tasks }, task }) === true;'
-    );
-    expect(file!.contents).toContain(
-      'return evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"label"}, { ...{ tasks: this.tasks }, task }) as string;'
-    );
-  });
-
-  it("the emitted methods actually evaluate each item's props correctly (proves the emission is sound)", () => {
-    const labelExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "label" };
-    const doneExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "done" };
-    const tasks = [
-      { id: "a", label: "Buy milk", done: false },
-      { id: "b", label: "Walk dog", done: true },
-    ];
-    const env = { tasks };
-    const rendered = tasks.map((task) => ({
-      key: task.id,
-      label: evaluate(labelExpr, { ...env, task }) as string,
-      done: evaluate(doneExpr, { ...env, task }) === true,
-    }));
-    expect(rendered).toEqual([
-      { key: "a", label: "Buy milk", done: false },
-      { key: "b", label: "Walk dog", done: true },
-    ]);
+    expect(file!.contents).toContain("return task.done;");
+    expect(file!.contents).toContain("return task.label;");
+    expect(file!.contents).not.toContain("loom-expr");
   });
 });
 
@@ -283,17 +245,10 @@ describe("emitAngular — resource (async data as list<T>, 0-or-1)", () => {
     expect(file!.contents).toContain("@Input() profile: Array<{ email: string }> = [];");
   });
 
-  it("a derived value's own getter reaches the resource as list<dataType> via isEmpty, exactly like task-list's tasks prop did for each", () => {
+  it("a derived value's own getter reaches the resource as list<dataType> via isEmpty, compiled directly — no evaluate call", () => {
     const [file] = emitAngular(makeResourceFixture());
-    expect(file!.contents).toContain(
-      'return evaluate({"type":"unop","op":"not","expr":{"type":"builtin","name":"isEmpty","args":[{"type":"ref","name":"profile"}]}}, { profile: this.profile }) === true;'
-    );
-  });
-
-  it("the emitted derived value actually evaluates correctly for both the empty and loaded case (proves the emission is sound)", () => {
-    const expr = { type: "unop" as const, op: "not" as const, expr: { type: "builtin" as const, name: "isEmpty" as const, args: [{ type: "ref" as const, name: "profile" }] } };
-    expect(evaluate(expr, { profile: [] })).toBe(false);
-    expect(evaluate(expr, { profile: [{ email: "a@b.co" }] })).toBe(true);
+    expect(file!.contents).toContain("return !((this.profile).length === 0);");
+    expect(file!.contents).not.toContain("loom-expr");
   });
 });
 
