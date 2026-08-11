@@ -211,3 +211,31 @@ All four are checked in CI (`.github/workflows/ci.yml`).
   a field initializer, since Angular sets `@Input()` values on the
   instance strictly after construction — a field initializer reading
   `this.checked` would only ever see the class's own declared default.
+- Fixed: `FieldNode.validate`, a `derived` value's own `expr`, and a
+  composed `{expr}` prop no longer emit `evaluate(exprJson, env)` calls —
+  `compileExprToJs` (`packages/loom-emit-core/src/compileExpr.ts`)
+  compiles each directly to native JS/TS referencing already-declared
+  local variables/class members, resolved through an emitter-specific
+  `RefResolver` (the replacement for building an env object literal). A
+  component using only these three mechanisms no longer imports
+  `loom-expr` at all; `checkbox`/`disclosure` still do, legitimately, for
+  the unrelated `LoomMachine`/`Transition`/`Guard` runtime classes — "the
+  interpreter" in this item's own name means `evaluate()` specifically,
+  not the machine. The old `=== true`/`as T` coercion is gone too:
+  compiled JS is already correctly typed, unlike an `any`-typed
+  interpreter result. Scoped to exactly the `Expr` shapes real
+  component-level exprs use — `literal`/`ref`/`member`/`unop`/`binop`/
+  `ternary`/every `builtin`; `quant`/`statesRef`/`transitionsRef` throw,
+  since they only make sense inside a claim's `states`/`transitions`
+  domain, which no `FieldNode.validate`/`derived.expr`/computed prop has
+  ever needed. Claims themselves are untouched — `loom-emit-tests` keeps
+  evaluating claim predicates via the interpreter, since generated tests
+  are dev-time-only and never shipped. One documented, narrower
+  correctness boundary: `==`/`!=`/`in`/`contains`/`oneOf` compile to JS's
+  own `===`/`.includes()`, correct for every primitive comparison (which
+  is everything any current component-level expr does) but not for
+  record/list-valued structural equality the way the interpreter's own
+  `deepEquals` handles it — nothing has ever needed that at this level,
+  and there's no type information available at this compile step to
+  guard the case reliably, so it's flagged in `compileExprToJs`'s own doc
+  comment rather than silently risked.

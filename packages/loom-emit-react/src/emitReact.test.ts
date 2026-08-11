@@ -153,17 +153,16 @@ describe("emitReact — composition", () => {
 });
 
 describe("emitReact — native fields, computed props, multi-target on", () => {
-  it("renders a FieldNode's local state, change handler, and live-evaluated validity", () => {
+  it("renders a FieldNode's local state, change handler, and compiled validity — no evaluate import at all (§ Phase 5f)", () => {
     const [file] = emitReact(makeLoginFixture());
-    expect(file!.contents).toContain('import { evaluate } from "loom-expr";');
+    expect(file!.contents).not.toContain("loom-expr");
     expect(file!.contents).toContain(
       '  const [usernameValue, setUsernameValue] = React.useState<string>("");'
     );
     expect(file!.contents).toContain(
       "  const [usernameTouched, setUsernameTouched] = React.useState<boolean>(false);"
     );
-    expect(file!.contents).toContain("const usernameValid = evaluate(");
-    expect(file!.contents).toContain('{ username: usernameValue }) === true;');
+    expect(file!.contents).toContain('const usernameValid = new RegExp("^[^@]+@[^@]+$").test(usernameValue);');
     expect(file!.contents).toContain("const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {");
     expect(file!.contents).toContain("setUsernameValue(e.target.value);");
     expect(file!.contents).toContain("setUsernameTouched(true);");
@@ -179,13 +178,10 @@ describe("emitReact — native fields, computed props, multi-target on", () => {
     );
   });
 
-  it("builds __env from own props and derived field validity, and evaluates a computed prop against it", () => {
+  it("compiles a computed prop directly against the field's own local variable — no env object at all", () => {
     const [file] = emitReact(makeLoginFixture());
-    expect(file!.contents).toContain(
-      "  const __env: any = { username: usernameValue, usernameValid: usernameValid };"
-    );
-    expect(file!.contents).toContain("<Button disabled={evaluate(");
-    expect(file!.contents).toContain(", __env) === true}");
+    expect(file!.contents).not.toContain("__env");
+    expect(file!.contents).toContain("<Button disabled={!(usernameValid)}");
   });
 
   it("wires a multi-target on: both callbacks invoked in one handler, payload sourced from field value", () => {
@@ -197,35 +193,16 @@ describe("emitReact — native fields, computed props, multi-target on", () => {
 });
 
 describe("emitReact — authored derived values", () => {
-  it("emits a named const computed from the field's own derived validity, using its own inline env (not __env)", () => {
+  it("emits a named const compiled directly from the field's own derived validity — no env object, no evaluate call", () => {
     const [file] = emitReact(makeDerivedFixture());
-    expect(file!.contents).toContain(
-      'const invalid = evaluate({"type":"unop","op":"not","expr":{"type":"ref","name":"emailValid"}}, { email: emailValue, emailValid: emailValid }) === true;'
-    );
+    expect(file!.contents).toContain("const invalid = !(emailValid);");
+    expect(file!.contents).not.toContain("__env");
+    expect(file!.contents).not.toContain("loom-expr");
   });
 
-  it("exposes the derived value's name in __env so a composed prop can reference it", () => {
+  it("a composed {expr} prop referencing a derived value by name compiles to a bare reference to that derived const, not a repeated expression", () => {
     const [file] = emitReact(makeDerivedFixture());
-    expect(file!.contents).toContain("const __env: any = { email: emailValue, emailValid: emailValid, invalid: invalid };");
-  });
-
-  it("a composed {expr} prop referencing a derived value by name evaluates a bare ref against __env, not a repeated expression", () => {
-    const [file] = emitReact(makeDerivedFixture());
-    expect(file!.contents).toContain('disabled={evaluate({"type":"ref","name":"invalid"}, __env) === true}');
-  });
-
-  it("the emitted derived value and the __env cross-reference both actually evaluate correctly (proves the emission is sound)", () => {
-    const emailValue = "not-an-email";
-    const emailValid = evaluate(
-      { type: "builtin", name: "matches", args: [{ type: "ref", name: "email" }, { type: "literal", valueType: { kind: "string" }, value: "^[^@]+@[^@]+$" }] },
-      { email: emailValue }
-    );
-    const invalid = evaluate({ type: "unop", op: "not", expr: { type: "ref", name: "emailValid" } }, { email: emailValue, emailValid });
-    const __env = { email: emailValue, emailValid, invalid };
-    const disabled = evaluate({ type: "ref", name: "invalid" }, __env);
-    expect(emailValid).toBe(false);
-    expect(invalid).toBe(true);
-    expect(disabled).toBe(true);
+    expect(file!.contents).toContain("<Button disabled={invalid}");
   });
 });
 
@@ -240,43 +217,12 @@ describe("emitReact — each (iteration)", () => {
     expect(file!.contents).toContain("<ListItem key={task.id}");
   });
 
-  it("a bool-typed templated prop keeps the historical === true coercion", () => {
+  it("a templated prop's {expr} compiles to a bare member access on the bound ident — no evaluate call, no === true/as T coercion needed for either bool or non-bool", () => {
     const [file] = emitReact(makeEachFixture());
-    expect(file!.contents).toContain(
-      'done={evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"done"}, { ...__env, task }) === true}'
-    );
-  });
-
-  it("a non-bool templated prop casts through loomTypeToTs instead of the === true coercion — the first non-bool computed prop this emitter has ever printed", () => {
-    const [file] = emitReact(makeEachFixture());
-    expect(file!.contents).toContain(
-      '(evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"label"}, { ...__env, task }) as string)'
-    );
-  });
-
-  it("merges the bound ident into __env for the templated instance's {expr} props, without touching __env's own construction", () => {
-    const [file] = emitReact(makeEachFixture());
-    expect(file!.contents).toContain("const __env: any = { tasks };");
-    expect(file!.contents).toContain("{ ...__env, task }");
-  });
-
-  it("the emitted map callback actually evaluates each item's props correctly (proves the emission is sound)", () => {
-    const labelExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "label" };
-    const doneExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "done" };
-    const tasks = [
-      { id: "a", label: "Buy milk", done: false },
-      { id: "b", label: "Walk dog", done: true },
-    ];
-    const __env = { tasks };
-    const rendered = tasks.map((task) => ({
-      key: task.id,
-      label: evaluate(labelExpr, { ...__env, task }) as string,
-      done: evaluate(doneExpr, { ...__env, task }) === true,
-    }));
-    expect(rendered).toEqual([
-      { key: "a", label: "Buy milk", done: false },
-      { key: "b", label: "Walk dog", done: true },
-    ]);
+    expect(file!.contents).toContain("done={task.done}");
+    expect(file!.contents).toContain("label={task.label}");
+    expect(file!.contents).not.toContain("__env");
+    expect(file!.contents).not.toContain("loom-expr");
   });
 });
 
@@ -330,17 +276,10 @@ describe("emitReact — resource (async data as list<T>, 0-or-1)", () => {
     expect(file!.contents).toContain("const { profile = [] } = props;");
   });
 
-  it("a derived value reaches the resource as list<dataType> via isEmpty, exactly like task-list's tasks prop did for each", () => {
+  it("a derived value reaches the resource as list<dataType> via isEmpty, compiled directly — no evaluate call", () => {
     const [file] = emitReact(makeResourceFixture());
-    expect(file!.contents).toContain(
-      'const loaded = evaluate({"type":"unop","op":"not","expr":{"type":"builtin","name":"isEmpty","args":[{"type":"ref","name":"profile"}]}}, { profile }) === true;'
-    );
-  });
-
-  it("the emitted derived value actually evaluates correctly for both the empty and loaded case (proves the emission is sound)", () => {
-    const expr = { type: "unop" as const, op: "not" as const, expr: { type: "builtin" as const, name: "isEmpty" as const, args: [{ type: "ref" as const, name: "profile" }] } };
-    expect(evaluate(expr, { profile: [] })).toBe(false);
-    expect(evaluate(expr, { profile: [{ email: "a@b.co" }] })).toBe(true);
+    expect(file!.contents).toContain("const loaded = !((profile).length === 0);");
+    expect(file!.contents).not.toContain("loom-expr");
   });
 });
 

@@ -5,15 +5,14 @@ import {
   capitalize,
   camelCase,
   collectReferencedComponents,
+  compileExprToJs,
   condToJs,
-  hasComputedProps,
-  hasDerivedValues,
   isComputedPropValue,
   loomTypeToTs,
   machineLines,
   machineSeedProp,
-  objectKey,
   pascalCase,
+  type RefResolver,
 } from "loom-emit-core";
 import type { Expr } from "loom-expr";
 
@@ -72,31 +71,39 @@ function eachTemplateIdents(nodes: readonly UsesNode[]): Map<string, string> {
 }
 
 /**
- * `{ propName: this.propName, fieldName: this.fieldName, fieldNameValid: this.fieldNameValid, ... }`
- * — the env a computed-prop getter, a derived value's own getter, or a
- * field's own validity evaluates against. `derived` is omitted by a derived
+ * Resolves a declared prop/resource/field(Valid)/derived name to the JS
+ * expression that currently holds it — the replacement for building an env
+ * object literal and calling `evaluate(exprJson, env)` against it. Unlike
+ * React, every name resolves through `this.` — Angular's `@Input()`/class
+ * members are never bare local variables. `derived` is omitted by a derived
  * value's own getter (composition.ts checks its `expr` against only props/
  * fields, never another derived value) and included for a computed-prop
- * getter, which — like React's `__env` — may reference a declared derived
- * value by name. A resource is read from its own `@Input()` member exactly
- * like a prop is — same shorthand-name treatment, no different code path.
+ * getter, which may reference a declared derived value by name. `boundIdent`
+ * (an each-template method's own loop-variable parameter) resolves to
+ * itself, bare — a method parameter, not a `this.` member.
  */
-function envLiteral(
+function buildRefResolver(
   props: readonly PropNode[],
   fields: readonly FieldNode[],
+  resources: readonly ResourceNode[] = [],
   derived: readonly DerivedNode[] = [],
-  resources: readonly ResourceNode[] = []
-): string {
-  const parts = [
-    ...props.map((p) => `${p.name}: this.${camelCase(p.name)}`),
-    ...resources.map((r) => `${r.name}: this.${camelCase(r.name)}`),
-    ...fields.flatMap((f) => {
-      const c = camelCase(f.name);
-      return [`${objectKey(f.name)}: this.${c}`, `${objectKey(`${f.name}Valid`)}: this.${c}Valid`];
-    }),
-    ...derived.map((d) => `${objectKey(d.name)}: this.${camelCase(d.name)}`),
-  ];
-  return `{ ${parts.join(", ")} }`;
+  boundIdent?: string
+): RefResolver {
+  const map = new Map<string, string>();
+  for (const p of props) map.set(p.name, `this.${camelCase(p.name)}`);
+  for (const r of resources) map.set(r.name, `this.${camelCase(r.name)}`);
+  for (const f of fields) {
+    const c = camelCase(f.name);
+    map.set(f.name, `this.${c}`);
+    map.set(`${f.name}Valid`, `this.${c}Valid`);
+  }
+  for (const d of derived) map.set(d.name, `this.${camelCase(d.name)}`);
+  if (boundIdent) map.set(boundIdent, boundIdent);
+  return (name) => {
+    const resolved = map.get(name);
+    if (resolved === undefined) throw new Error(`emitAngular: unresolved reference '${name}' while compiling an expression`);
+    return resolved;
+  };
 }
 
 function escapeHtml(text: string): string {
@@ -345,7 +352,6 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   const hasFiresWhen = events.some((e) => e.firesWhen);
   const fields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
   const derivedValues = component.declarations.filter((d): d is DerivedNode => d.kind === "derived");
-  const needsEvaluate = fields.length > 0 || hasComputedProps(component.composition) || hasDerivedValues(component.declarations);
   // The only structural link between "a prop that mirrors current state" and "which state
   // that is" — see `machineSeedProp`'s own doc comment. Used both to seed `state` correctly
   // (previously always `__machine.initialState`, ignoring e.g. `checked`/`expanded`
@@ -367,7 +373,6 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     `import { ${coreImports.join(", ")} } from "@angular/core";`,
     usesNgIf ? `import { NgIf } from "@angular/common";` : undefined,
     hasMachine ? `import { LoomMachine, Transition, Guard } from "loom-expr";` : undefined,
-    needsEvaluate ? `import { evaluate } from "loom-expr";` : undefined,
     ...referencedComponents.map((c) => `import { ${pascalCase(c.name)}Component } from "./${pascalCase(c.name)}.component";`),
     ``,
   ].filter((l): l is string => l !== undefined);
@@ -454,7 +459,12 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     lines.push(`  ${camel}: string = ${JSON.stringify(field.initialValue ?? "")};`);
     lines.push(`  ${camel}Touched: boolean = false;`);
     const validExpr = field.validate
-      ? `evaluate(${JSON.stringify(field.validate)}, { ${field.name}: this.${camel} }) === true`
+      ? compileExprToJs(field.validate, (name) => {
+          if (name !== field.name) {
+            throw new Error(`emitAngular: field '${field.id}' validate references unresolved name '${name}'`);
+          }
+          return `this.${camel}`;
+        })
       : `true`;
     lines.push(`  get ${camel}Valid(): boolean {`);
     lines.push(`    return ${validExpr};`);
@@ -467,21 +477,23 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   }
 
   // A derived value's own getter is unconditional (bool-only for now — nothing yet needs
-  // another valueType kind); a computed-prop getter's env additionally exposes derived names,
-  // so a composed `{ expr }` prop can reference one by name instead of repeating its expression.
+  // another valueType kind); a computed-prop getter's resolver additionally covers derived
+  // names, so a composed `{ expr }` prop can reference one by name instead of repeating its
+  // expression.
   for (const derived of derivedValues) {
     if (derived.valueType.kind !== "bool") {
       throw new Error(`emitAngular: derived '${derived.id}' has unsupported valueType kind '${derived.valueType.kind}' (only 'bool' is supported)`);
     }
     lines.push(`  get ${camelCase(derived.name)}(): boolean {`);
-    lines.push(`    return evaluate(${JSON.stringify(derived.expr)}, ${envLiteral(props, fields, [], resources)}) === true;`);
+    lines.push(`    return ${compileExprToJs(derived.expr, buildRefResolver(props, fields, resources))};`);
     lines.push(`  }`);
     lines.push(``);
   }
 
   // A template node's own computed-prop {expr}s become parameterized methods, not zero-arg
   // getters — a getter can't see the each's own loop variable (§ eachTemplateIdents' doc comment,
-  // "printer plus lambda-lifter"). Every other computed prop keeps the plain getter form.
+  // "printer plus lambda-lifter"). Every other computed prop keeps the plain getter form. No
+  // `=== true`/`as T` coercion needed anymore: `compileExprToJs`'s output is genuine typed JS.
   for (const node of component.composition) {
     const boundIdent = eachIdents.get(node.name);
     for (const [propName, value] of Object.entries(node.props ?? {})) {
@@ -490,11 +502,8 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
         (d): d is PropNode => d.kind === "prop" && d.name === propName
       )!.valueType;
       const tsType = loomTypeToTs(declaredType);
-      const env = boundIdent
-        ? `{ ...${envLiteral(props, fields, derivedValues, resources)}, ${boundIdent} }`
-        : envLiteral(props, fields, derivedValues, resources);
-      const call = `evaluate(${JSON.stringify(value.expr)}, ${env})`;
-      const result = declaredType.kind === "bool" ? `${call} === true` : `${call} as ${tsType}`;
+      const resolveRef = buildRefResolver(props, fields, resources, derivedValues, boundIdent);
+      const result = compileExprToJs(value.expr, resolveRef);
       const name = computedPropGetterName(node.name, propName);
       if (boundIdent) {
         lines.push(`  ${name}(${boundIdent}: any): ${tsType} {`);
