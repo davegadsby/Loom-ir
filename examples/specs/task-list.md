@@ -35,6 +35,10 @@ reaching a *list*-typed free input, not just a string one (`signup-dialog`
 already proved this for a string field — § Phase 3). Named as one word,
 deliberately — see `nonempty`'s own declaration below for why.
 
+**Keyboard.** None — every rendered `list-item` is display-only (its own
+spec declares no keyboard behavior), and `task-list` itself declares no
+event of its own for anything to activate.
+
 ## Declarations
 
 ### tasks

@@ -27,6 +27,20 @@ closes it." This component deliberately has no `Machine` section: its
 behavior is expressed entirely through `firesWhen` and `on` wiring,
 neither a `LoomMachine` nor `states`/`transitions` of its own.
 
+**Keyboard.** Confirm is a real `<button>` (`button.md`'s own a11y
+pattern), so once the dialog is open it's Tab-reachable and Enter/Space
+both activate it, closing the dialog exactly as a click would — no
+separate keyboard path needed. There is deliberately no Escape-to-close
+and no focus trap: "only Confirm closes it" (Rationale above, and this
+component's own `confirm-closes-the-dialog` claim below) is a stated
+design decision, not an oversight, and adding a second dismissal path
+would contradict it rather than complete it. Without a focus trap, Tab
+can still move focus past the dialog while it stays visually open — a
+keyboard user has no way to *dismiss* it except activating Confirm
+(which also performs the destructive action), a real, known limitation
+inherited from `dialog`'s own "no focus trap" boundary (§ `dialog.md`),
+not solved here.
+
 ## Declarations
 
 ### open

@@ -40,3 +40,26 @@ export const ValidityGatedEnablement: Story = {
     await expect(args.onClosed).toHaveBeenCalledTimes(1);
   },
 };
+
+export const LoginIsKeyboardOperableOnceEnabled: Story = {
+  play: async ({ canvasElement, args }) => {
+    // `login-dialog.md`'s own "Keyboard" note: both fields are natively
+    // Tab-reachable/typeable, and Login/Cancel are real `<button>`s —
+    // Tab-reachable, Enter/Space-operable once Login is enabled. No
+    // `<form>` wrapper, so this deliberately types values in directly
+    // rather than pressing Enter inside a field (which does not submit).
+    const root = canvasElement.querySelector('[data-loom-component="login-dialog"]')!;
+    const username = root.querySelector<HTMLInputElement>('input[name="username"]')!;
+    const password = root.querySelector<HTMLInputElement>('input[name="password"]')!;
+    const login = root.querySelectorAll<HTMLButtonElement>('[data-loom-component="button"]')[0]!;
+
+    await userEvent.type(username, "a@b.co");
+    await userEvent.type(password, "longenough123");
+    await expect(login.disabled).toBe(false);
+
+    login.focus();
+    await userEvent.keyboard(" ");
+    await expect(args.onLogin).toHaveBeenCalledWith({ username: "a@b.co", password: "longenough123" });
+    await expect(args.onClosed).toHaveBeenCalledTimes(1);
+  },
+};

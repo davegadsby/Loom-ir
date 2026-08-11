@@ -24,6 +24,20 @@ export const ClickChecksAnUncheckedBox: Story = {
   },
 };
 
+export const ClickChecksAnUncheckedBoxViaSpaceKey: Story = {
+  play: async ({ canvasElement }) => {
+    // [checkbox/claims/click-checks-an-unchecked-box] unchecked --[{"kind":"event","name":"click"}]--> checked
+    // Same scenario, driven via focus + Space instead of a click — sound only because a
+    // native checkbox's Space-activation dispatches the same real 'click' event a mouse would.
+    const root = canvasElement.querySelector('[data-loom-component="checkbox"]');
+    if (!root) throw new Error("scenario 'checkbox/claims/click-checks-an-unchecked-box': no 'checkbox' root found in canvasElement");
+    await expect(readState(root)).toBe("unchecked");
+    (root as HTMLElement).focus();
+    await userEvent.keyboard(" ");
+    await expect(readState(root)).toBe("checked");
+  },
+};
+
 export const ClickUnchecksACheckedBox: Story = {
   args: { checked: true },
   play: async ({ canvasElement }) => {
@@ -34,6 +48,21 @@ export const ClickUnchecksACheckedBox: Story = {
     if (!root) throw new Error("scenario 'checkbox/claims/click-unchecks-a-checked-box': no 'checkbox' root found in canvasElement");
     await expect(readState(root)).toBe("checked");
     await userEvent.click(root);
+    await expect(readState(root)).toBe("unchecked");
+  },
+};
+
+export const ClickUnchecksACheckedBoxViaSpaceKey: Story = {
+  args: { checked: true },
+  play: async ({ canvasElement }) => {
+    // [checkbox/claims/click-unchecks-a-checked-box] checked --[{"kind":"event","name":"click"}]--> unchecked
+    // Same scenario, driven via focus + Space instead of a click — sound only because a
+    // native checkbox's Space-activation dispatches the same real 'click' event a mouse would.
+    const root = canvasElement.querySelector('[data-loom-component="checkbox"]');
+    if (!root) throw new Error("scenario 'checkbox/claims/click-unchecks-a-checked-box': no 'checkbox' root found in canvasElement");
+    await expect(readState(root)).toBe("checked");
+    (root as HTMLElement).focus();
+    await userEvent.keyboard(" ");
     await expect(readState(root)).toBe("unchecked");
   },
 };

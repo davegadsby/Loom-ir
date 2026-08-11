@@ -50,3 +50,17 @@ export const OpenShowsDialogAndConfirmCloses: Story = {
     await expect(args.onClosed).toHaveBeenCalledTimes(1);
   },
 };
+
+export const ConfirmIsKeyboardOperable: Story = {
+  args: { open: true },
+  play: async ({ canvasElement, args }) => {
+    // `confirmation-dialog.md`'s own "Keyboard" note: Confirm is a real
+    // `<button>`, Tab-reachable and Enter/Space-operable — no separate
+    // keyboard path needed, and no Escape-to-close exists (deliberate).
+    const root = canvasElement.querySelector('[data-loom-component="confirmation-dialog"]')!;
+    const confirm = root.querySelector<HTMLButtonElement>('[data-loom-component="button"]')!;
+    confirm.focus();
+    await userEvent.keyboard("{Enter}");
+    await expect(args.onClosed).toHaveBeenCalledTimes(1);
+  },
+};

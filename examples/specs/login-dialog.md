@@ -38,6 +38,16 @@ its behavior is expressed entirely through native field state,
 `{expr}` computed props, and `on` wiring, none of which a
 `LoomMachine` or `states`/`transitions` would add anything to.
 
+**Keyboard.** `username`/`password` are real `<input>`s — natively
+Tab-reachable and typeable. Login/Cancel are real `<button>`s
+(`button.md`'s own a11y pattern) — Tab-reachable, and Enter/Space both
+activate whichever is focused (Login only once enabled, same guard a
+mouse click would hit). One boundary worth stating plainly: there is no
+`<form>` wrapper, so pressing Enter *inside* a field does not submit —
+a keyboard user must Tab to Login (or Cancel) and activate it directly.
+No Escape-to-close, no focus trap, same inherited boundary
+`confirmation-dialog` already states.
+
 ## Declarations
 
 ### username

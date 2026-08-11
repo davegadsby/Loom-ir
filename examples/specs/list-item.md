@@ -10,6 +10,9 @@ One row of a `list` — a label and a done flag, nothing else. The
 smallest interactive-free leaf `task-list` instantiates once per element
 of its `tasks` prop, via `each`.
 
+**Keyboard.** None — `list-item` declares no event and renders no
+focusable element; `label`/`done` are display-only props.
+
 ## Declarations
 
 ### label

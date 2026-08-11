@@ -19,6 +19,13 @@ that a composing component can demonstrate both literal-prop injection
 (`variant`) and literal-slot-text injection (`default`) on the same
 embedded instance.
 
+**Keyboard.** Enter and Space both activate it — free from the browser,
+since the `button` a11y pattern (§ A11y below) compiles to a real
+`<button>`, not a `<div role="button">`. No declared `kind: "key"` trigger
+is needed or possible here: `press`'s own `trigger` (below) is
+`kind: "event"`, and the browser itself synthesizes a `click` event for
+both keys on a real `<button>` before this component ever sees it.
+
 ## Declarations
 
 ### variant
