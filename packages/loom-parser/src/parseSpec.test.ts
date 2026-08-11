@@ -410,6 +410,96 @@ invalidMessage: "Enter a valid email address."
     }
   });
 
+  it("parses a derived block, typechecked against a sibling field's own value and derived <name>Valid", () => {
+    const spec = `---
+name: signup
+kind: primitive
+---
+
+## Declarations
+
+### username
+
+\`\`\`yaml
+kind: field
+validate: 'matches(username, "^[^@]+@[^@]+$")'
+\`\`\`
+
+### submit-disabled
+
+\`\`\`yaml
+kind: derived
+type: bool
+expr: "not usernameValid"
+\`\`\`
+`;
+    const component = parseSpec(spec);
+    const derived = component.declarations.find((d) => d.kind === "derived");
+    expect(derived).toMatchObject({ kind: "derived", name: "submit-disabled", valueType: { kind: "bool" } });
+    expect(derived!.id).toBe("signup/declarations/submit-disabled");
+    if (derived!.kind === "derived") {
+      expect(derived!.expr).toMatchObject({ type: "unop", op: "not" });
+    }
+  });
+
+  it("rejects a derived block whose expression's type doesn't match its declared type", () => {
+    const spec = `---
+name: bad-signup
+kind: primitive
+---
+
+## Declarations
+
+### always-true
+
+\`\`\`yaml
+kind: derived
+type: string
+expr: "true"
+\`\`\`
+`;
+    expect(() => parseSpec(spec)).toThrow(/declared type 'string' does not match its expression's type 'bool'/);
+  });
+
+  it("parses a resource block, exposing it to the value graph as list<dataType>", () => {
+    const spec = `---
+name: profile-card
+kind: primitive
+---
+
+## Declarations
+
+### profile
+
+\`\`\`yaml
+kind: resource
+dataType: "record{email: string}"
+\`\`\`
+
+### loaded
+
+\`\`\`yaml
+kind: derived
+type: bool
+expr: "not isEmpty(profile)"
+\`\`\`
+`;
+    const component = parseSpec(spec);
+    const resource = component.declarations.find((d) => d.kind === "resource");
+    expect(resource).toMatchObject({
+      kind: "resource",
+      name: "profile",
+      dataType: { kind: "record", fields: { email: { kind: "string" } } },
+    });
+    expect(resource!.id).toBe("profile-card/declarations/profile");
+
+    // The derived value above only parses at all if `profile` typechecks as list<record{...}>
+    // inside `not isEmpty(profile)` — confirms checkComposition's value-graph wiring, not just
+    // that the resource block itself parses.
+    const loaded = component.declarations.find((d) => d.kind === "derived");
+    expect(loaded).toMatchObject({ kind: "derived", name: "loaded" });
+  });
+
   it("parses a composite spec with {fields} slotContent, an {expr} computed prop, and a multi-target 'on' wire with payload", () => {
     const buttonSpec = `---
 name: button
@@ -531,6 +621,97 @@ on:
     expect(loginButton.props).toMatchObject({ disabled: { expr: { type: "unop", op: "not" } } });
     expect(loginButton.on).toEqual({
       press: [{ event: "login", payload: { username: "username" } }, { event: "closed" }],
+    });
+  });
+
+  it("parses slotContent.each end to end from real YAML — no new grammar needed, just a new slotContent shape riding the existing raw pass-through", () => {
+    const listSpec = `---
+name: list
+kind: primitive
+---
+
+## Declarations
+
+### default
+
+\`\`\`yaml
+kind: slot
+\`\`\`
+`;
+    const listItemSpec = `---
+name: list-item
+kind: primitive
+---
+
+## Declarations
+
+### label
+
+\`\`\`yaml
+kind: prop
+type: string
+\`\`\`
+`;
+    const taskListSpec = `---
+name: task-list
+kind: composite
+---
+
+## Declarations
+
+### tasks
+
+\`\`\`yaml
+kind: prop
+type: "list<record{id: string, label: string}>"
+default: []
+\`\`\`
+
+## Composition
+
+### list-instance
+
+\`\`\`yaml
+kind: uses
+component: list
+root: true
+slotContent:
+  default:
+    each:
+      over: tasks
+      as: task
+      use: item-template
+      key: id
+\`\`\`
+
+### item-template
+
+\`\`\`yaml
+kind: uses
+component: list-item
+props:
+  label:
+    expr: "task.label"
+\`\`\`
+`;
+    const list = parseSpec(listSpec);
+    const listItem = parseSpec(listItemSpec);
+    const taskList = parseSpec(taskListSpec, {
+      resolveComponent: (ref) => {
+        if (ref === "list") return list;
+        if (ref === "list-item") return listItem;
+        throw new Error(`unknown component '${ref}'`);
+      },
+    });
+
+    const listInstance = taskList.composition.find((n) => n.name === "list-instance")!;
+    expect(listInstance.slotContent).toEqual({
+      default: { each: { over: "tasks", as: "task", use: "item-template", key: "id" } },
+    });
+
+    const itemTemplate = taskList.composition.find((n) => n.name === "item-template")!;
+    expect(itemTemplate.props).toEqual({
+      label: { expr: { type: "member", target: { type: "ref", name: "task" }, property: "label" } },
     });
   });
 });

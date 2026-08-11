@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitAngular } from "./emitAngular.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture } from "./fixtures.js";
+import {
+  makeFixture,
+  makeStyledFixture,
+  makeCompositionFixture,
+  makeLoginFixture,
+  makeDerivedFixture,
+  makeEachFixture,
+  makeResourceFixture,
+  makeKeyTriggeredEventFixture,
+  makeCheckboxPatternFixture,
+} from "./fixtures.js";
 
 describe("emitAngular", () => {
   it("emits one *.component.ts file per component", () => {
@@ -64,7 +74,7 @@ describe("emitAngular", () => {
 
   it("sets role from the pattern-conformance node and aria-disabled from the disabled prop", () => {
     const [file] = emitAngular(makeFixture());
-    expect(file!.contents).toContain(`[attr.role]="'checkbox'"`);
+    expect(file!.contents).toContain(`[attr.role]="'widget'"`);
     expect(file!.contents).toContain('[attr.aria-disabled]="disabled"');
   });
 
@@ -116,7 +126,7 @@ describe("emitAngular — composition", () => {
     const [file] = emitAngular(makeCompositionFixture());
     expect(file!.contents).toContain(
       '<ng-container *ngIf="open"><loom-dialog><div slot="title">Confirm Deletion</div>' +
-        '<div slot="actions"><loom-button [variant]="\'primary\'" (press)="closed.emit($event)">Confirm</loom-button></div>' +
+        '<div slot="actions"><loom-button [variant]="\'primary\'" (press)="closed.emit({  })">Confirm</loom-button></div>' +
         "</loom-dialog></ng-container>"
     );
   });
@@ -170,5 +180,149 @@ describe("emitAngular — native fields, computed getters, on wiring", () => {
   it("wires a multi-target on inline as chained X.emit({...}) template statements, payload sourced from the field's own class member", () => {
     const [file] = emitAngular(makeLoginFixture());
     expect(file!.contents).toContain('(press)="login.emit({ username: username }); closed.emit({  })"');
+  });
+});
+
+describe("emitAngular — authored derived values", () => {
+  it("emits a named getter (not an inline evaluate call in the template) computed from the field's own derived validity", () => {
+    const [file] = emitAngular(makeDerivedFixture());
+    expect(file!.contents).toContain("get invalid(): boolean {");
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"unop","op":"not","expr":{"type":"ref","name":"emailValid"}}, { email: this.email, emailValid: this.emailValid }) === true;'
+    );
+  });
+
+  it("a computed-prop getter's env additionally exposes the derived value's own getter, so a composed {expr} prop can reference it by name", () => {
+    const [file] = emitAngular(makeDerivedFixture());
+    expect(file!.contents).toContain("get submitButtonDisabled(): boolean {");
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"ref","name":"invalid"}, { email: this.email, emailValid: this.emailValid, invalid: this.invalid }) === true;'
+    );
+    expect(file!.contents).toContain('[disabled]="submitButtonDisabled"');
+  });
+
+  it("the derived value's own getter and the cross-referencing getter both actually evaluate correctly (proves the emission is sound)", () => {
+    const emailValid = evaluate(
+      { type: "builtin", name: "matches", args: [{ type: "ref", name: "email" }, { type: "literal", valueType: { kind: "string" }, value: "^[^@]+@[^@]+$" }] },
+      { email: "not-an-email" }
+    );
+    const invalid = evaluate({ type: "unop", op: "not", expr: { type: "ref", name: "emailValid" } }, { email: "not-an-email", emailValid });
+    const disabled = evaluate({ type: "ref", name: "invalid" }, { email: "not-an-email", emailValid, invalid });
+    expect(emailValid).toBe(false);
+    expect(invalid).toBe(true);
+    expect(disabled).toBe(true);
+  });
+});
+
+describe("emitAngular — each (iteration)", () => {
+  it("prints *ngFor with trackBy on the templated instance's own tag, not a wrapper", () => {
+    const [file] = emitAngular(makeEachFixture());
+    expect(file!.contents).toContain('<loom-list-item *ngFor="let task of tasks; trackBy: trackByTask"');
+  });
+
+  it("prints a trackBy method returning the each.key field off the bound ident", () => {
+    const [file] = emitAngular(makeEachFixture());
+    expect(file!.contents).toContain("trackByTask(index: number, task: any): any {");
+    expect(file!.contents).toContain("return task.id;");
+  });
+
+  it("a template node's computed {expr} prop becomes a parameterized method, not a zero-arg getter — the lambda-lifting a loop variable forces", () => {
+    const [file] = emitAngular(makeEachFixture());
+    expect(file!.contents).toContain("itemTemplateLabel(task: any): string {");
+    expect(file!.contents).not.toContain("get itemTemplateLabel()");
+    expect(file!.contents).toContain('[label]="itemTemplateLabel(task)"');
+  });
+
+  it("a bool-typed template prop keeps the historical === true coercion; a non-bool one casts through loomTypeToTs instead", () => {
+    const [file] = emitAngular(makeEachFixture());
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"done"}, { ...{ tasks: this.tasks }, task }) === true;'
+    );
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"label"}, { ...{ tasks: this.tasks }, task }) as string;'
+    );
+  });
+
+  it("the emitted methods actually evaluate each item's props correctly (proves the emission is sound)", () => {
+    const labelExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "label" };
+    const doneExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "done" };
+    const tasks = [
+      { id: "a", label: "Buy milk", done: false },
+      { id: "b", label: "Walk dog", done: true },
+    ];
+    const env = { tasks };
+    const rendered = tasks.map((task) => ({
+      key: task.id,
+      label: evaluate(labelExpr, { ...env, task }) as string,
+      done: evaluate(doneExpr, { ...env, task }) === true,
+    }));
+    expect(rendered).toEqual([
+      { key: "a", label: "Buy milk", done: false },
+      { key: "b", label: "Walk dog", done: true },
+    ]);
+  });
+});
+
+describe("emitAngular — EventNode.trigger kind: key (real keyboard triggers, § Phase 5d)", () => {
+  it("binds (keydown) guarded to the declared key with &&, and makes the root focusable", () => {
+    const [file] = emitAngular(makeKeyTriggeredEventFixture());
+    expect(file!.contents).toContain('tabindex="0"');
+    expect(file!.contents).toContain(`(keydown)="$event.key === 'Escape' && dismissed.emit({  })"`);
+  });
+
+  it("does not add tabindex or a keydown binding to a component with no key trigger", () => {
+    const [file] = emitAngular(makeFixture()); // click trigger only (via its machine)
+    expect(file!.contents).not.toContain("tabindex");
+    expect(file!.contents).not.toContain("(keydown)");
+  });
+});
+
+describe("emitAngular — resource (async data as list<T>, 0-or-1)", () => {
+  it("declares the resource as an @Input() Array<dataType>, defaulting to []", () => {
+    const [file] = emitAngular(makeResourceFixture());
+    expect(file!.contents).toContain("@Input() profile: Array<{ email: string }> = [];");
+  });
+
+  it("a derived value's own getter reaches the resource as list<dataType> via isEmpty, exactly like task-list's tasks prop did for each", () => {
+    const [file] = emitAngular(makeResourceFixture());
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"unop","op":"not","expr":{"type":"builtin","name":"isEmpty","args":[{"type":"ref","name":"profile"}]}}, { profile: this.profile }) === true;'
+    );
+  });
+
+  it("the emitted derived value actually evaluates correctly for both the empty and loaded case (proves the emission is sound)", () => {
+    const expr = { type: "unop" as const, op: "not" as const, expr: { type: "builtin" as const, name: "isEmpty" as const, args: [{ type: "ref" as const, name: "profile" }] } };
+    expect(evaluate(expr, { profile: [] })).toBe(false);
+    expect(evaluate(expr, { profile: [{ email: "a@b.co" }] })).toBe(true);
+  });
+});
+
+describe("emitAngular — checkbox pattern: a real <input type=\"checkbox\"> (§ Phase 5e)", () => {
+  it("prints a void <input> — no children, no closing tag", () => {
+    const [file] = emitAngular(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain("<input ");
+    expect(file!.contents).toContain("/>`,");
+    expect(file!.contents).not.toContain("[attr.role]");
+  });
+
+  it("binds checked to the machine state and disabled to the native attribute, not aria-disabled", () => {
+    const [file] = emitAngular(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain(`[checked]="state === 'checked'"`);
+    expect(file!.contents).not.toContain("aria-disabled");
+  });
+
+  it("binds the dispatch handler to (change), not (click) — the idiomatic native checkbox event", () => {
+    const [file] = emitAngular(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain(`(change)="dispatch('click')"`);
+    expect(file!.contents).not.toContain("(click)");
+  });
+
+  it("seeds the machine's initial state from the checked prop via ngOnInit, not a field initializer", () => {
+    const [file] = emitAngular(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain("import { Component, EventEmitter, Input, Output, OnInit } from \"@angular/core\";");
+    expect(file!.contents).toContain("implements OnInit");
+    expect(file!.contents).toContain("state: string = __machine.initialState;");
+    expect(file!.contents).toContain("ngOnInit(): void {");
+    expect(file!.contents).toContain("if (this.checked) this.state = 'checked';");
   });
 });

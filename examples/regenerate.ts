@@ -39,7 +39,20 @@ const cliBin = join(repoRoot, "packages", "loom-cli", "dist", "bin.js");
 
 // Real standalone components only — interactive-base is a mixin spec, not
 // something anyone compiles to a component on its own.
-const components = ["checkbox", "disclosure", "button", "dialog", "confirmation-dialog", "login-dialog"];
+const components = [
+  "checkbox",
+  "disclosure",
+  "button",
+  "dialog",
+  "confirmation-dialog",
+  "login-dialog",
+  "signup-dialog",
+  "list",
+  "list-item",
+  "task-list",
+  "profile-card",
+  "dismiss-banner",
+];
 
 const figmaResponse: FigmaVariablesResponse = JSON.parse(
   readFileSync(join(here, "figma-variables-fixture.json"), "utf8")

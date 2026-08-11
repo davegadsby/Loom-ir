@@ -37,4 +37,17 @@ describe("domainToArbitrary", () => {
   it("throws a clear error when a where domain is unsatisfiable (guard rail)", () => {
     expect(() => domainToArbitrary(parseDomain("where(range(0, 1), x > 1000)", "x"))).toThrow(/unsatisfiable/);
   });
+
+  it("throws when a list domain's size.max is 0 (guard rail: can only ever produce the empty list)", () => {
+    expect(() => domainToArbitrary(parseDomain("list<int> size(0, 0)", "x"))).toThrow(/never produce a non-empty list/);
+  });
+
+  it("does not throw for a list domain that can produce a non-empty list", () => {
+    const arb = domainToArbitrary(parseDomain("list<int> size(0, 3)", "x"));
+    fc.assert(fc.property(arb, (v) => Array.isArray(v)));
+  });
+
+  it("throws a clear error for an empty oneOf domain", () => {
+    expect(() => domainToArbitrary({ kind: "oneOf", literals: [] })).toThrow(/no literals/);
+  });
 });

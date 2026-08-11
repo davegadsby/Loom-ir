@@ -7,6 +7,8 @@ export type {
   SlotNode,
   MethodNode,
   FieldNode,
+  DerivedNode,
+  ResourceNode,
   DeclarationNode,
   StateNode,
   TransitionNode,
@@ -27,6 +29,7 @@ export type {
   VisualConformanceNode,
   StyleNode,
   UsesNode,
+  EachSlotContent,
   CompositionNode,
   PropValue,
   OnWireTarget,
@@ -46,3 +49,6 @@ export { visit, reduce, findById, allNodes, children } from "./visit.js";
 
 export { checkPath, PathCheckError } from "./paths.js";
 export { checkComposition, CompositionCheckError } from "./composition.js";
+
+export type { RenderNode, Attr, Handler, Effect, Scope } from "./render.js";
+export { lower, lowerComposition, lowerRootHandlers, hasKeydownHandler } from "./lower.js";

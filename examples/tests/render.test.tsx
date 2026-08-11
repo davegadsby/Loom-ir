@@ -1,0 +1,293 @@
+// @vitest-environment jsdom
+/**
+ * Renders the COMMITTED generated components and asserts they actually behave.
+ *
+ * This is the regression net the repo did not have. `examplesUpToDate.test.ts`
+ * proves the emitted *text* is unchanged; it has never proved the text compiles,
+ * mounts, or responds to a click. Once the emitters are refactored, byte-equality
+ * stops applying — these tests are what carries the guarantee forward.
+ *
+ * Tests marked `it.fails` document defects that exist in the compiler today. They
+ * are not skips: vitest fails the suite if one of them starts passing, so each is
+ * a live tripwire that tells us the moment a fix lands.
+ */
+import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach } from "vitest";
+import { Checkbox } from "../generated/react/Checkbox";
+import { Button } from "../generated/react/Button";
+import { LoginDialog } from "../generated/react/LoginDialog";
+import { ConfirmationDialog } from "../generated/react/ConfirmationDialog";
+import { SignupDialog } from "../generated/react/SignupDialog";
+import { TaskList } from "../generated/react/TaskList";
+import { ProfileCard } from "../generated/react/ProfileCard";
+import { DismissBanner } from "../generated/react/DismissBanner";
+
+afterEach(cleanup);
+
+describe("Checkbox — a real <input type=\"checkbox\">, machine-backed (§ Phase 5e)", () => {
+  const checkboxInput = (c: HTMLElement) => c.querySelector("input[type='checkbox']");
+
+  it("is a real HTMLInputElement, not a div with role=\"checkbox\"", () => {
+    const { container } = render(<Checkbox />);
+    expect(checkboxInput(container)).not.toBeNull();
+    expect(container.querySelector("div[role='checkbox']")).toBeNull();
+  });
+
+  it("starts in the machine's initial state", () => {
+    const { getByRole } = render(<Checkbox />);
+    expect((getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("starts checked when the checked prop is true — proves the machine's initial state is seeded from it, not always the first-declared state", () => {
+    const { getByRole } = render(<Checkbox checked />);
+    expect((getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("toggles state on click, driving the embedded LoomMachine end to end", () => {
+    const { getByRole } = render(<Checkbox />);
+    const el = getByRole("checkbox") as HTMLInputElement;
+    fireEvent.click(el);
+    expect(el.checked).toBe(true);
+    fireEvent.click(el);
+    expect(el.checked).toBe(false);
+  });
+
+  it("respects the transition guard: a disabled checkbox does not toggle", () => {
+    const { getByRole } = render(<Checkbox disabled />);
+    const el = getByRole("checkbox") as HTMLInputElement;
+    fireEvent.click(el);
+    expect(el.checked).toBe(false);
+  });
+});
+
+describe("LoginDialog — native fields and live validation", () => {
+  const usernameInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[name="username"]')!;
+  const passwordInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[name="password"]')!;
+  const errorFor = (c: HTMLElement, field: string) => c.querySelector(`[data-loom-field-error="${field}"]`);
+
+  it("renders both fields, with the password field masked", () => {
+    const { container } = render(<LoginDialog />);
+    expect(usernameInput(container).type).toBe("text");
+    expect(passwordInput(container).type).toBe("password");
+  });
+
+  it("shows no error before the field is touched, even though it is empty and invalid", () => {
+    const { container } = render(<LoginDialog />);
+    expect(errorFor(container, "username")).toBeNull();
+    expect(errorFor(container, "password")).toBeNull();
+  });
+
+  it("shows the error once touched and invalid, then clears it when the value becomes valid", () => {
+    const { container } = render(<LoginDialog />);
+    const input = usernameInput(container);
+
+    fireEvent.change(input, { target: { value: "nope" } });
+    expect(errorFor(container, "username")?.textContent).toBe("Enter a valid email address.");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+
+    fireEvent.change(input, { target: { value: "a@b.co" } });
+    expect(errorFor(container, "username")).toBeNull();
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("enforces the 8-character password rule live", () => {
+    const { container } = render(<LoginDialog />);
+    const input = passwordInput(container);
+
+    fireEvent.change(input, { target: { value: "short" } });
+    expect(errorFor(container, "password")?.textContent).toBe("Password must be at least 8 characters.");
+
+    fireEvent.change(input, { target: { value: "longenough" } });
+    expect(errorFor(container, "password")).toBeNull();
+  });
+
+  it("computes Login's disabled prop across BOTH fields — the cross-component computed value", () => {
+    const { container } = render(<LoginDialog />);
+    // Button's root is now a real <button> (§ Phase 5b) — its own `disabled` prop binds the
+    // native `disabled` DOM property, not `aria-disabled`.
+    const login = () => container.querySelectorAll<HTMLButtonElement>('[data-loom-component="button"]')[0]!;
+
+    expect(login().disabled).toBe(true);
+
+    fireEvent.change(usernameInput(container), { target: { value: "a@b.co" } });
+    expect(login().disabled).toBe(true); // password still invalid
+
+    fireEvent.change(passwordInput(container), { target: { value: "longenough" } });
+    expect(login().disabled).toBe(false); // both valid
+  });
+});
+
+describe("SignupDialog — an authored derived value, cross-referenced from a composed prop", () => {
+  const emailInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[name="email"]')!;
+  const submitButton = (c: HTMLElement) => c.querySelectorAll<HTMLButtonElement>('[data-loom-component="button"]')[0]!;
+
+  it("computes the named `invalid` derived value from the field's own validity, disabling Submit through it", () => {
+    const { container } = render(<SignupDialog />);
+    expect(submitButton(container).disabled).toBe(true);
+
+    fireEvent.change(emailInput(container), { target: { value: "not-an-email" } });
+    expect(submitButton(container).disabled).toBe(true);
+
+    fireEvent.change(emailInput(container), { target: { value: "a@b.co" } });
+    expect(submitButton(container).disabled).toBe(false);
+  });
+
+  it("shows and clears the field error live, same as LoginDialog's own fields", () => {
+    const { container } = render(<SignupDialog />);
+    const input = emailInput(container);
+    const error = () => container.querySelector('[data-loom-field-error="email"]');
+
+    expect(error()).toBeNull();
+    fireEvent.change(input, { target: { value: "nope" } });
+    expect(error()?.textContent).toBe("Enter a valid email address.");
+    fireEvent.change(input, { target: { value: "a@b.co" } });
+    expect(error()).toBeNull();
+  });
+});
+
+describe("TaskList — each: one rendered instance per element of a list-typed prop", () => {
+  const items = (c: HTMLElement) => c.querySelectorAll('[data-loom-component="list-item"]');
+
+  it("renders zero list-item instances for the default (empty) tasks", () => {
+    const { container } = render(<TaskList />);
+    expect(items(container)).toHaveLength(0);
+  });
+
+  it("renders exactly one list-item instance per element of tasks — proves .map() genuinely iterates, not a fixed-arity render", () => {
+    const tasks = [
+      { id: "a", label: "Buy milk", done: false },
+      { id: "b", label: "Walk dog", done: true },
+      { id: "c", label: "Write report", done: false },
+    ];
+    const { container } = render(<TaskList tasks={tasks} />);
+    expect(items(container)).toHaveLength(3);
+  });
+
+  it("re-renders to match a changed tasks array, in either direction — confirms this is live iteration, not something computed once", () => {
+    const { container, rerender } = render(<TaskList tasks={[{ id: "a", label: "One", done: false }]} />);
+    expect(items(container)).toHaveLength(1);
+
+    rerender(
+      <TaskList
+        tasks={[
+          { id: "a", label: "One", done: false },
+          { id: "b", label: "Two", done: false },
+          { id: "c", label: "Three", done: true },
+        ]}
+      />
+    );
+    expect(items(container)).toHaveLength(3);
+
+    rerender(<TaskList tasks={[]} />);
+    expect(items(container)).toHaveLength(0);
+  });
+
+  it("each rendered list-item conforms to the WAI-ARIA listitem pattern, same as any other list-item instance", () => {
+    const { container } = render(<TaskList tasks={[{ id: "a", label: "One", done: false }]} />);
+    expect(items(container)[0]!.getAttribute("role")).toBe("listitem");
+  });
+});
+
+describe("real triggers — EventNode.trigger fires a declared event off its own root click, no machine required", () => {
+  // Formerly four it.fails tripwires (Phase 0 through Phase 4), all sharing one root cause:
+  // Button has no state machine, and only a machine-backed transition ever got a click handler
+  // wired up — so Button's own `press` event never fired, and everything composed on top of it
+  // (ConfirmationDialog/LoginDialog/SignupDialog's own composed Button/submit-button) never saw
+  // a press to react to. `button.md`'s `press` event now declares `trigger: { kind: event, name:
+  // click }`, which `lowerRootHandlers` turns into a real click handler — fixing all four at once.
+
+  it("Button invokes onPress when clicked", () => {
+    let pressed = false;
+    const { getByRole } = render(<Button onPress={() => { pressed = true; }}>Go</Button>);
+    fireEvent.click(getByRole("button"));
+    expect(pressed).toBe(true);
+  });
+
+  it("ConfirmationDialog fires onClosed when Confirm is pressed", () => {
+    let closed = false;
+    const { container } = render(<ConfirmationDialog open onClosed={() => { closed = true; }} />);
+    fireEvent.click(container.querySelector('[data-loom-component="button"]')!);
+    expect(closed).toBe(true);
+  });
+
+  it("LoginDialog fires onLogin with the typed credentials when Login is pressed", () => {
+    const seen: Array<{ username: string; password: string }> = [];
+    const { container } = render(<LoginDialog onLogin={(p) => seen.push(p)} />);
+
+    const u = container.querySelector<HTMLInputElement>('input[name="username"]')!;
+    const p = container.querySelector<HTMLInputElement>('input[name="password"]')!;
+    fireEvent.change(u, { target: { value: "a@b.co" } });
+    fireEvent.change(p, { target: { value: "longenough" } });
+    fireEvent.click(container.querySelectorAll('[data-loom-component="button"]')[0]!);
+
+    expect(seen).toEqual([{ username: "a@b.co", password: "longenough" }]);
+  });
+
+  it("SignupDialog fires onSubscribed with the typed email when Submit is pressed", () => {
+    const seen: Array<{ email: string }> = [];
+    const { container } = render(<SignupDialog onSubscribed={(p) => seen.push(p)} />);
+
+    fireEvent.change(container.querySelector<HTMLInputElement>('input[name="email"]')!, { target: { value: "a@b.co" } });
+    fireEvent.click(container.querySelectorAll('[data-loom-component="button"]')[0]!);
+
+    expect(seen).toEqual([{ email: "a@b.co" }]);
+  });
+});
+
+describe("Button — a real <button> tag for the button a11y pattern (§ Phase 5b)", () => {
+  it("is a real HTMLButtonElement, not a div with role=\"button\"", () => {
+    const { container } = render(<Button>Go</Button>);
+    expect(container.querySelector("button")).not.toBeNull();
+    expect(container.querySelector("div[role='button']")).toBeNull();
+  });
+
+  it("a disabled button does not fire onPress when clicked — the browser refuses to dispatch click at all, no manual guard needed", () => {
+    let pressed = false;
+    const { getByRole } = render(<Button disabled onPress={() => { pressed = true; }}>Go</Button>);
+    fireEvent.click(getByRole("button"));
+    expect(pressed).toBe(false);
+  });
+
+  it("re-enabling clears the native disabled attribute and restores click behavior", () => {
+    let pressed = false;
+    const { getByRole, rerender } = render(<Button disabled onPress={() => { pressed = true; }}>Go</Button>);
+    rerender(<Button onPress={() => { pressed = true; }}>Go</Button>);
+    fireEvent.click(getByRole("button"));
+    expect(pressed).toBe(true);
+  });
+});
+
+describe("ProfileCard — resource: an async value reaches the value graph as list<dataType>, 0-or-1 (§ Phase 5c)", () => {
+  it("mounts with the default (unloaded) resource — an empty array, no fetch mechanism to wait on", () => {
+    const { container } = render(<ProfileCard />);
+    expect(container.querySelector('[data-loom-component="profile-card"]')).not.toBeNull();
+  });
+
+  it("mounts with a consumer-provided, already-loaded resource — proves the emitted derived getter evaluates against a real one-element array without throwing", () => {
+    const { container } = render(<ProfileCard profile={[{ name: "Ada Lovelace", email: "ada@example.com" }]} />);
+    expect(container.querySelector('[data-loom-component="profile-card"]')).not.toBeNull();
+  });
+});
+
+describe("DismissBanner — EventNode.trigger kind: key fires a declared event off its own root keydown, no machine required (§ Phase 5d)", () => {
+  it("is focusable — tabIndex={0} is present since the root has a keydown handler", () => {
+    const { getByRole } = render(<DismissBanner>Saved.</DismissBanner>);
+    expect(getByRole("alert").tabIndex).toBe(0);
+  });
+
+  it("fires onDismissed when Escape is pressed", () => {
+    let dismissed = false;
+    const { getByRole } = render(<DismissBanner onDismissed={() => { dismissed = true; }}>Saved.</DismissBanner>);
+    fireEvent.keyDown(getByRole("alert"), { key: "Escape" });
+    expect(dismissed).toBe(true);
+  });
+
+  it("does not fire onDismissed for any other key — proves the emitted guard actually discriminates by key", () => {
+    let dismissed = false;
+    const { getByRole } = render(<DismissBanner onDismissed={() => { dismissed = true; }}>Saved.</DismissBanner>);
+    fireEvent.keyDown(getByRole("alert"), { key: "Enter" });
+    fireEvent.keyDown(getByRole("alert"), { key: "a" });
+    expect(dismissed).toBe(false);
+  });
+});

@@ -1,7 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitReact } from "./emitReact.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture } from "./fixtures.js";
+import {
+  makeFixture,
+  makeStyledFixture,
+  makeCompositionFixture,
+  makeLoginFixture,
+  makeDerivedFixture,
+  makeEachFixture,
+  makeTriggeredEventFixture,
+  makeKeyTriggeredEventFixture,
+  makeResourceFixture,
+  makeCheckboxPatternFixture,
+} from "./fixtures.js";
 
 describe("emitReact", () => {
   it("emits one PascalCase-named file per component", () => {
@@ -47,7 +58,7 @@ describe("emitReact", () => {
   it("embeds the machine and wires a generic click dispatch", () => {
     const [file] = emitReact(makeFixture());
     expect(file!.contents).toContain("__machine");
-    expect(file!.contents).toContain('onClick={() => dispatch("click")}');
+    expect(file!.contents).toContain('onClick={() => { dispatch("click"); }}');
     expect(file!.contents).toContain('"id":"unchecked"');
     expect(file!.contents).toContain('id: "toggle-on"');
   });
@@ -59,7 +70,10 @@ describe("emitReact", () => {
     expect(file!.contents).toContain("new Transition({");
     expect(file!.contents).toContain("guard: Guard.from({");
     expect(file!.contents).not.toContain("__machine: any");
-    expect(file!.contents).toContain("React.useState<string>(__machine.initialState)");
+    // Seeded from `checked` (§ machineSeedProp — its own name matches a declared state's
+    // name), not always `__machine.initialState`: makeFixture()'s `checked` prop is exactly
+    // this shape, same as the real checkbox.md spec.
+    expect(file!.contents).toContain('React.useState<string>(checked ? "checked" : __machine.initialState)');
     expect(file!.contents).toContain("const next = __machine.dispatch(state, eventName, env);");
     expect(file!.contents).toContain("if (next) setState(next);");
     // the old inline .find()-over-raw-transitions logic is gone — LoomMachine owns it now
@@ -69,7 +83,7 @@ describe("emitReact", () => {
 
   it("sets role from the pattern-conformance node and aria-disabled from the disabled prop", () => {
     const [file] = emitReact(makeFixture());
-    expect(file!.contents).toContain('role="checkbox"');
+    expect(file!.contents).toContain('role="widget"');
     expect(file!.contents).toContain("aria-disabled={disabled}");
   });
 
@@ -179,5 +193,180 @@ describe("emitReact — native fields, computed props, multi-target on", () => {
     expect(file!.contents).toContain(
       "onPress={() => { onLogin?.({ username: usernameValue }); onClosed?.({  }); }}"
     );
+  });
+});
+
+describe("emitReact — authored derived values", () => {
+  it("emits a named const computed from the field's own derived validity, using its own inline env (not __env)", () => {
+    const [file] = emitReact(makeDerivedFixture());
+    expect(file!.contents).toContain(
+      'const invalid = evaluate({"type":"unop","op":"not","expr":{"type":"ref","name":"emailValid"}}, { email: emailValue, emailValid: emailValid }) === true;'
+    );
+  });
+
+  it("exposes the derived value's name in __env so a composed prop can reference it", () => {
+    const [file] = emitReact(makeDerivedFixture());
+    expect(file!.contents).toContain("const __env: any = { email: emailValue, emailValid: emailValid, invalid: invalid };");
+  });
+
+  it("a composed {expr} prop referencing a derived value by name evaluates a bare ref against __env, not a repeated expression", () => {
+    const [file] = emitReact(makeDerivedFixture());
+    expect(file!.contents).toContain('disabled={evaluate({"type":"ref","name":"invalid"}, __env) === true}');
+  });
+
+  it("the emitted derived value and the __env cross-reference both actually evaluate correctly (proves the emission is sound)", () => {
+    const emailValue = "not-an-email";
+    const emailValid = evaluate(
+      { type: "builtin", name: "matches", args: [{ type: "ref", name: "email" }, { type: "literal", valueType: { kind: "string" }, value: "^[^@]+@[^@]+$" }] },
+      { email: emailValue }
+    );
+    const invalid = evaluate({ type: "unop", op: "not", expr: { type: "ref", name: "emailValid" } }, { email: emailValue, emailValid });
+    const __env = { email: emailValue, emailValid, invalid };
+    const disabled = evaluate({ type: "ref", name: "invalid" }, __env);
+    expect(emailValid).toBe(false);
+    expect(invalid).toBe(true);
+    expect(disabled).toBe(true);
+  });
+});
+
+describe("emitReact — each (iteration)", () => {
+  it("prints a slot fill as tasks.map((task) => (...)), not a fixed-arity render", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain("<List>{tasks.map((task) => (<ListItem");
+  });
+
+  it("prints a React key from each.key, as the first attribute on the templated instance", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain("<ListItem key={task.id}");
+  });
+
+  it("a bool-typed templated prop keeps the historical === true coercion", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain(
+      'done={evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"done"}, { ...__env, task }) === true}'
+    );
+  });
+
+  it("a non-bool templated prop casts through loomTypeToTs instead of the === true coercion — the first non-bool computed prop this emitter has ever printed", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain(
+      '(evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"label"}, { ...__env, task }) as string)'
+    );
+  });
+
+  it("merges the bound ident into __env for the templated instance's {expr} props, without touching __env's own construction", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain("const __env: any = { tasks };");
+    expect(file!.contents).toContain("{ ...__env, task }");
+  });
+
+  it("the emitted map callback actually evaluates each item's props correctly (proves the emission is sound)", () => {
+    const labelExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "label" };
+    const doneExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "done" };
+    const tasks = [
+      { id: "a", label: "Buy milk", done: false },
+      { id: "b", label: "Walk dog", done: true },
+    ];
+    const __env = { tasks };
+    const rendered = tasks.map((task) => ({
+      key: task.id,
+      label: evaluate(labelExpr, { ...__env, task }) as string,
+      done: evaluate(doneExpr, { ...__env, task }) === true,
+    }));
+    expect(rendered).toEqual([
+      { key: "a", label: "Buy milk", done: false },
+      { key: "b", label: "Walk dog", done: true },
+    ]);
+  });
+});
+
+describe("emitReact — EventNode.trigger (real triggers, no machine required)", () => {
+  it("wires a click handler that fires the triggered event's own callback, with no machine at all", () => {
+    const [file] = emitReact(makeTriggeredEventFixture());
+    expect(file!.contents).not.toContain("__machine");
+    expect(file!.contents).not.toContain("dispatch");
+    expect(file!.contents).toContain('onClick={() => { onPress?.({  }); }}');
+  });
+
+  it("merges a machine dispatch and a triggered event that share the same DOM trigger into one handler, not two competing attributes", () => {
+    const fixture = makeFixture(); // has a machine, trigger { kind: event, name: click }
+    fixture.declarations = [
+      ...fixture.declarations,
+      {
+        id: "checkbox/declarations/activated",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "activated",
+        payloadType: { kind: "record", fields: {} },
+        trigger: { kind: "event", name: "click" },
+      },
+    ];
+    const [file] = emitReact(fixture);
+    const onClickCount = (file!.contents.match(/onClick=/g) ?? []).length;
+    expect(onClickCount).toBe(1);
+    expect(file!.contents).toContain('onClick={() => { dispatch("click"); onActivated?.({  }); }}');
+  });
+});
+
+describe("emitReact — EventNode.trigger kind: key (real keyboard triggers, § Phase 5d)", () => {
+  it("wires an onKeyDown handler guarded to the declared key, and makes the root focusable", () => {
+    const [file] = emitReact(makeKeyTriggeredEventFixture());
+    expect(file!.contents).toContain("tabIndex={0}");
+    expect(file!.contents).toContain('onKeyDown={(e) => { if (e.key === "Escape") { onDismissed?.({  }); } }}');
+  });
+
+  it("does not add tabIndex or a keydown handler to a component with no key trigger", () => {
+    const [file] = emitReact(makeTriggeredEventFixture()); // click trigger only
+    expect(file!.contents).not.toContain("tabIndex");
+    expect(file!.contents).not.toContain("onKeyDown");
+  });
+});
+
+describe("emitReact — resource (async data as list<T>, 0-or-1)", () => {
+  it("declares the resource as an Array<dataType> prop, defaulting to []", () => {
+    const [file] = emitReact(makeResourceFixture());
+    expect(file!.contents).toContain("profile?: Array<{ email: string }>;");
+    expect(file!.contents).toContain("const { profile = [] } = props;");
+  });
+
+  it("a derived value reaches the resource as list<dataType> via isEmpty, exactly like task-list's tasks prop did for each", () => {
+    const [file] = emitReact(makeResourceFixture());
+    expect(file!.contents).toContain(
+      'const loaded = evaluate({"type":"unop","op":"not","expr":{"type":"builtin","name":"isEmpty","args":[{"type":"ref","name":"profile"}]}}, { profile }) === true;'
+    );
+  });
+
+  it("the emitted derived value actually evaluates correctly for both the empty and loaded case (proves the emission is sound)", () => {
+    const expr = { type: "unop" as const, op: "not" as const, expr: { type: "builtin" as const, name: "isEmpty" as const, args: [{ type: "ref" as const, name: "profile" }] } };
+    expect(evaluate(expr, { profile: [] })).toBe(false);
+    expect(evaluate(expr, { profile: [{ email: "a@b.co" }] })).toBe(true);
+  });
+});
+
+describe("emitReact — checkbox pattern: a real <input type=\"checkbox\"> (§ Phase 5e)", () => {
+  it("prints a void <input> — no children, no closing tag", () => {
+    const [file] = emitReact(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain("<input");
+    expect(file!.contents).toContain("/>");
+    expect(file!.contents).not.toContain("</input>");
+    expect(file!.contents).not.toContain('role="checkbox"');
+  });
+
+  it("binds checked to the machine state and disabled to the native attribute, not aria-disabled", () => {
+    const [file] = emitReact(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain('checked={state === "checked"}');
+    expect(file!.contents).not.toContain("aria-disabled");
+  });
+
+  it("binds the dispatch handler to onChange, not onClick — checked is a controlled prop, and React warns without an onChange handler", () => {
+    const [file] = emitReact(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain('onChange={() => { dispatch("click"); }}');
+    expect(file!.contents).not.toContain("onClick");
+  });
+
+  it("seeds the machine's initial state from the checked prop, not always the first-declared state", () => {
+    const [file] = emitReact(makeCheckboxPatternFixture());
+    expect(file!.contents).toContain('React.useState<string>(checked ? "checked" : __machine.initialState)');
   });
 });

@@ -36,8 +36,11 @@ describe("full pipeline integration (checkbox archetype)", () => {
       expect(reactFile!.contents).toContain(marker);
       expect(angularFile!.contents).toContain(marker);
     }
-    expect(reactFile!.contents).toContain('onClick={() => dispatch("click")}');
-    expect(angularFile!.contents).toContain(`(click)="dispatch('click')"`);
+    // `onChange`/`(change)`, not `onClick`/`(click)` — checkbox is a real `<input
+    // type="checkbox">` (§ Phase 5e); the dispatched event name stays "click" (matching
+    // the transitions' own declared trigger), only the DOM binding it prints under changes.
+    expect(reactFile!.contents).toContain('onChange={() => { dispatch("click"); }}');
+    expect(angularFile!.contents).toContain(`(change)="dispatch('click')"`);
   });
 
   it("joins a results ledger onto the tree and derives the full §9 status spread without mutating the AST", () => {

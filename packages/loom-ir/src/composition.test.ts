@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { LoomType } from "loom-expr";
 import { checkComposition, CompositionCheckError } from "./composition.js";
-import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode } from "./nodes.js";
+import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode, DerivedNode, ResourceNode } from "./nodes.js";
 
 function makeChildComponent(overrides: Partial<ComponentNode> = {}): ComponentNode {
   return {
@@ -227,6 +228,70 @@ describe("checkComposition", () => {
     expect(() => checkComposition(widget)).not.toThrow();
   });
 
+  it("accepts a declared event with a trigger and an empty payloadType", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/press", kind: "event", origin: "own", assertable: false, name: "press", payloadType: { kind: "record", fields: {} }, trigger: { kind: "event", name: "click" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when a triggered event's payloadType is not record{}", () => {
+    const widget = makeWidget({
+      declarations: [
+        {
+          id: "widget/declarations/press",
+          kind: "event",
+          origin: "own",
+          assertable: false,
+          name: "press",
+          payloadType: { kind: "record", fields: { x: { kind: "string" } } },
+          trigger: { kind: "event", name: "click" },
+        },
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/trigger but its payloadType is not 'record{}'/);
+  });
+
+  it("throws when a triggered event's payloadType is a non-record type", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/press", kind: "event", origin: "own", assertable: false, name: "press", payloadType: { kind: "string" }, trigger: { kind: "event", name: "click" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/trigger but its payloadType is not 'record{}'/);
+  });
+
+  it("accepts a declared event with a kind:key trigger", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/dismissed", kind: "event", origin: "own", assertable: false, name: "dismissed", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Escape" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when two declared events wire a keydown trigger to two different keys — both backends can only bind one keydown handler on the root", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/dismissed", kind: "event", origin: "own", assertable: false, name: "dismissed", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Escape" } },
+        { id: "widget/declarations/confirmed", kind: "event", origin: "own", assertable: false, name: "confirmed", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Enter" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/more than one distinct keyboard trigger key/);
+  });
+
+  it("allows two declared events to share the exact same keydown trigger key (they merge into one handler)", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/dismissed", kind: "event", origin: "own", assertable: false, name: "dismissed", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Escape" } },
+        { id: "widget/declarations/cancelled", kind: "event", origin: "own", assertable: false, name: "cancelled", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Escape" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
   const username: FieldNode = {
     id: "widget/declarations/username",
     kind: "field",
@@ -387,5 +452,316 @@ describe("checkComposition", () => {
       composition: [makeUses({ root: true, on: { press: "closed" } })],
     });
     expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  describe("derived", () => {
+    it("accepts a derived value whose expression's type matches its declared type", () => {
+      const submitDisabled: DerivedNode = {
+        id: "widget/declarations/submit-disabled",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "submit-disabled",
+        valueType: { kind: "bool" },
+        expr: { type: "unop", op: "not", expr: { type: "ref", name: "usernameValid" } },
+      };
+      const widget = makeWidget({ declarations: [username, submitDisabled] });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("throws when a derived expression is malformed", () => {
+      const bad: DerivedNode = {
+        id: "widget/declarations/bad",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "bad",
+        valueType: { kind: "bool" },
+        expr: { type: "ref", name: "nonexistent" },
+      };
+      const widget = makeWidget({ declarations: [bad] });
+      expect(() => checkComposition(widget)).toThrow(/invalid expression/);
+    });
+
+    it("throws when a derived expression's type doesn't match its declared type", () => {
+      const wrongType: DerivedNode = {
+        id: "widget/declarations/wrong-type",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "wrong-type",
+        valueType: { kind: "string" },
+        expr: { type: "unop", op: "not", expr: { type: "ref", name: "usernameValid" } },
+      };
+      const widget = makeWidget({ declarations: [username, wrongType] });
+      expect(() => checkComposition(widget)).toThrow(/declared type 'string' does not match its expression's type 'bool'/);
+    });
+
+    it("can reference own props alongside a field's derived <name>Valid", () => {
+      const disabledProp: PropNode = {
+        id: "widget/declarations/disabled",
+        kind: "prop",
+        origin: "own",
+        assertable: false,
+        name: "disabled",
+        valueType: { kind: "bool" },
+      };
+      const submitDisabled: DerivedNode = {
+        id: "widget/declarations/submit-disabled",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "submit-disabled",
+        valueType: { kind: "bool" },
+        expr: {
+          type: "binop",
+          op: "or",
+          left: { type: "ref", name: "disabled" },
+          right: { type: "unop", op: "not", expr: { type: "ref", name: "usernameValid" } },
+        },
+      };
+      const widget = makeWidget({ declarations: [disabledProp, username, submitDisabled] });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("lets a composed {expr} prop reference a declared derived value by name", () => {
+      const submitDisabled: DerivedNode = {
+        id: "widget/declarations/submit-disabled",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "submit-disabled",
+        valueType: { kind: "bool" },
+        expr: { type: "unop", op: "not", expr: { type: "ref", name: "usernameValid" } },
+      };
+      const widget = makeWidget({
+        declarations: [username, submitDisabled],
+        composition: [makeBoolUses({ root: true, props: { disabled: { expr: { type: "ref", name: "submit-disabled" } } } })],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("does not let a composed {expr} prop reference another derived value's own name from within a derived expression", () => {
+      // i.e. one DerivedNode's expr can't reference a sibling DerivedNode — confirmed by the
+      // "invalid expression" case above using an entirely unrelated field; this test instead
+      // confirms a real cross-derived reference is rejected the same way, not silently accepted.
+      const a: DerivedNode = {
+        id: "widget/declarations/a",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "a",
+        valueType: { kind: "bool" },
+        expr: { type: "literal", valueType: { kind: "bool" }, value: true },
+      };
+      const b: DerivedNode = {
+        id: "widget/declarations/b",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "b",
+        valueType: { kind: "bool" },
+        expr: { type: "ref", name: "a" },
+      };
+      const widget = makeWidget({ declarations: [a, b] });
+      expect(() => checkComposition(widget)).toThrow(/invalid expression/);
+    });
+  });
+
+  describe("each", () => {
+    const itemType: LoomType = { kind: "record", fields: { id: { kind: "string" }, label: { kind: "string" } } };
+    const itemsProp: PropNode = {
+      id: "widget/declarations/items",
+      kind: "prop",
+      origin: "own",
+      assertable: false,
+      name: "items",
+      valueType: { kind: "list", of: itemType },
+      defaultValue: [],
+    };
+    const itemChild = makeChildComponent({
+      id: "item",
+      name: "item",
+      declarations: [
+        { id: "item/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" } },
+        { id: "item/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+      ],
+    });
+    function makeItemUses(overrides: Partial<UsesNode>): UsesNode {
+      return {
+        id: "widget/composition/item-template",
+        kind: "uses",
+        origin: "own",
+        assertable: false,
+        name: "item-template",
+        component: "item",
+        resolvedComponent: itemChild,
+        ...overrides,
+      };
+    }
+    const itemLabelExpr = { type: "member", target: { type: "ref", name: "item" }, property: "label" } as const;
+
+    it("accepts a valid each: iterates a declared list prop, instantiating its template with the bound ident in scope", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template", key: "id" } } } }),
+          makeItemUses({ props: { label: { expr: itemLabelExpr } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("throws when each.over is not a declared prop", () => {
+      const widget = makeWidget({
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "missing", as: "item", use: "item-template" } } } }),
+          makeItemUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/each.over 'missing' is not a declared prop/);
+    });
+
+    it("throws when each.over is not a list-typed prop", () => {
+      const notAList: PropNode = { ...itemsProp, name: "count", valueType: { kind: "int" }, defaultValue: 0 };
+      const widget = makeWidget({
+        declarations: [notAList],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "count", as: "item", use: "item-template" } } } }),
+          makeItemUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/must be a list-typed prop/);
+    });
+
+    it("throws when each.use references an unknown composition node (caught by the same structural 'unknown composition node' check 'uses' gets)", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "missing" } } } })],
+      });
+      expect(() => checkComposition(widget)).toThrow(/references unknown composition node 'missing'/);
+    });
+
+    it("throws when each.key is not a field of the item's record type", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template", key: "missing" } } } }),
+          makeItemUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/each.key 'missing' is not a field/);
+    });
+
+    it("claims each.use's node the same way a plain 'uses' entry does — claimed twice throws, unclaimed (orphaned) throws", () => {
+      const claimedTwice = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: { default: { each: { over: "items", as: "item", use: "item-template" } }, other: { uses: ["item-template"] } },
+          }),
+          makeItemUses({}),
+        ],
+      });
+      expect(() => checkComposition(claimedTwice)).toThrow(/claimed by more than one parent/);
+
+      const orphaned = makeWidget({
+        declarations: [itemsProp],
+        composition: [makeUses({ root: true }), makeItemUses({})],
+      });
+      expect(() => checkComposition(orphaned)).toThrow(/is orphaned/);
+    });
+
+    it("lets the template node's {expr} props reference the bound ident, typed as the list's element type", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template" } } } }),
+          makeItemUses({ props: { label: { expr: itemLabelExpr } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("rejects a template {expr} prop whose type doesn't match, same as any other computed prop", () => {
+      const wrongType = { type: "literal", valueType: { kind: "bool" }, value: true } as const;
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template" } } } }),
+          makeItemUses({ props: { label: { expr: wrongType } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/computed expression has type 'bool', expected 'string'/);
+    });
+
+    it("does NOT let the bound ident leak into a node that isn't the each's own template — e.g. one nested a level deeper, inside the template's own slot", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template" } } } }),
+          makeItemUses({ slotContent: { default: { uses: ["unrelated"] } } }),
+          makeBoolUses({ name: "unrelated", props: { disabled: { expr: itemLabelExpr } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/invalid computed expression/);
+    });
+  });
+
+  describe("resource", () => {
+    const profileResource: ResourceNode = {
+      id: "widget/declarations/profile",
+      kind: "resource",
+      origin: "own",
+      assertable: false,
+      name: "profile",
+      dataType: { kind: "record", fields: { email: { kind: "string" } } },
+    };
+
+    it("a derived value can reference a resource's value graph type, list<dataType>", () => {
+      const loaded: DerivedNode = {
+        id: "widget/declarations/loaded",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "loaded",
+        valueType: { kind: "bool" },
+        expr: { type: "unop", op: "not", expr: { type: "builtin", name: "isEmpty", args: [{ type: "ref", name: "profile" }] } },
+      };
+      const widget = makeWidget({ declarations: [profileResource, loaded] });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("rejects a derived expression that treats a resource as anything other than list<dataType>", () => {
+      const wrong: DerivedNode = {
+        id: "widget/declarations/wrong",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "wrong",
+        valueType: { kind: "string" },
+        expr: { type: "member", target: { type: "ref", name: "profile" }, property: "email" },
+      };
+      const widget = makeWidget({ declarations: [profileResource, wrong] });
+      expect(() => checkComposition(widget)).toThrow(/invalid expression/);
+    });
+
+    it("lets a composed {expr} prop reference a resource's value graph type", () => {
+      const widget = makeWidget({
+        declarations: [profileResource],
+        composition: [
+          makeBoolUses({
+            root: true,
+            props: {
+              disabled: {
+                expr: { type: "builtin", name: "isEmpty", args: [{ type: "ref", name: "profile" }] },
+              },
+            },
+          }),
+        ],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
   });
 });

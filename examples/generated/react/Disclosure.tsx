@@ -41,7 +41,7 @@ export interface DisclosureProps {
 
 export function Disclosure(props: DisclosureProps): React.ReactElement {
   const { disabled = false, expanded = false, trigger, panel, onToggle } = props;
-  const [state, setState] = React.useState<string>(__machine.initialState);
+  const [state, setState] = React.useState<string>(expanded ? "expanded" : __machine.initialState);
 
   const dispatch = (eventName: string) => {
     const env: any = { disabled, expanded };
@@ -55,7 +55,7 @@ export function Disclosure(props: DisclosureProps): React.ReactElement {
       data-state={state}
       role="disclosure"
       aria-disabled={disabled}
-      onClick={() => dispatch("click")}
+      onClick={() => { dispatch("click"); }}
     >
       <div data-loom-slot="trigger">{trigger}</div>
       <div data-loom-slot="panel">{panel}</div>

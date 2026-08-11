@@ -1,0 +1,8 @@
+$ loom report examples/specs/list-item.md --results examples/loom.results.json
+
+not-applicable component            list-item
+not-applicable prop                 list-item/declarations/label
+not-applicable prop                 list-item/declarations/done
+unverifiable   unexpressible        list-item/claims/done-reads-as-visually-distinct
+unverified     pattern-conformance  list-item/a11y/listitem-pattern
+not-applicable intent               list-item/prose/intent

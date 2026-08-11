@@ -76,7 +76,13 @@ export function makeFixture(): ComponentNode {
         origin: "own",
         assertable: true,
         verify: "a11y",
-        pattern: "checkbox",
+        // Deliberately not "checkbox" — this fixture declares slots to exercise generic
+        // slot-rendering logic, and the checkbox pattern now prints a real, childless
+        // `<input type="checkbox">` (§ Phase 5e), which cannot render slots at all. A
+        // neutral pattern name keeps this fixture testing what it's actually for; the real
+        // checkbox-as-`<input>` mechanism is proven against the real spec instead (see
+        // examples/specs/checkbox.md + examples/tests/render.test.tsx).
+        pattern: "widget",
       },
     ],
     style: [],
@@ -343,5 +349,287 @@ export function makeLoginFixture(): ComponentNode {
       },
     ],
     composition: [dialogUses, loginButton],
+  });
+}
+
+/**
+ * A `signup-widget` declaring one field (`email`) and one *authored*
+ * `derived` value (`invalid`) computed from that field's own derived
+ * validity, referenced by name from a composed button's `{expr}` prop
+ * instead of repeating the expression.
+ *
+ * Deliberately single-word, not `submit-disabled`: `loom-expr`'s identifier
+ * lexer has no hyphen in its grammar (`[A-Za-z_][A-Za-z0-9_]*`), so a
+ * hyphenated name can never be *referenced* from expression text at all —
+ * `parseExpr("submit-disabled")` parses as the binop `submit - disabled`,
+ * not a single ref, and fails to typecheck as an unresolved reference. This
+ * isn't new to `derived` — it silently affects any kebab-case prop or field
+ * name too, just unexercised until a name needed referencing from
+ * expression text (every existing example's referenced names happen to be
+ * single words). Tracked as a known gap in `DerivedNode`'s doc comment and
+ * `AGENTS.md`, not fixed here.
+ */
+export function makeDerivedFixture(): ComponentNode {
+  const dialog = makeChildComponent("dialog", {
+    declarations: [
+      { id: "dialog/declarations/body", kind: "slot", origin: "own", assertable: false, name: "body" },
+      { id: "dialog/declarations/actions", kind: "slot", origin: "own", assertable: false, name: "actions" },
+    ],
+  });
+  const button = makeChildComponent("button", {
+    declarations: [
+      {
+        id: "button/declarations/disabled",
+        kind: "prop",
+        origin: "own",
+        assertable: false,
+        name: "disabled",
+        valueType: { kind: "bool" },
+        defaultValue: false,
+      },
+      { id: "button/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+    ],
+  });
+
+  const email: FieldNode = {
+    id: "signup-widget/declarations/email",
+    kind: "field",
+    origin: "own",
+    assertable: false,
+    name: "email",
+    validate: parseExpr('matches(email, "^[^@]+@[^@]+$")'),
+    invalidMessage: "Enter a valid email address.",
+  };
+
+  const invalid = {
+    id: "signup-widget/declarations/invalid",
+    kind: "derived" as const,
+    origin: "own" as const,
+    assertable: false as const,
+    name: "invalid",
+    valueType: { kind: "bool" as const },
+    expr: parseExpr("not emailValid"),
+  };
+
+  const submitButton: UsesNode = {
+    id: "signup-widget/composition/submit-button",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "submit-button",
+    component: "button",
+    resolvedComponent: button,
+    props: { disabled: { expr: parseExpr("invalid") } },
+    slotContent: { default: { text: "Sign up" } },
+  };
+
+  const dialogUses: UsesNode = {
+    id: "signup-widget/composition/dialog-instance",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "dialog-instance",
+    component: "dialog",
+    resolvedComponent: dialog,
+    root: true,
+    slotContent: {
+      body: { fields: ["email"] },
+      actions: { uses: ["submit-button"] },
+    },
+  };
+
+  return makeChildComponent("signup-widget", {
+    declarations: [email, invalid],
+    composition: [dialogUses, submitButton],
+  });
+}
+
+/**
+ * A `task-list` composing a `list` (root, one `default` slot) whose slot is
+ * filled by an `each` over `tasks` — a `list<record{id,label,done}>` prop —
+ * instantiating a leaf `list-item` template once per element. The template's
+ * `label`/`done` props are `{expr}`s referencing the bound `task` ident
+ * (`task.label`/`task.done`), exercising `printPropExpr`'s bound-ident env
+ * merge and its non-bool cast path (`label` is `string`, not `bool` — no
+ * existing fixture before this one ever computed a non-bool `{expr}` prop).
+ */
+export function makeEachFixture(): ComponentNode {
+  const list = makeChildComponent("list", {
+    declarations: [{ id: "list/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" }],
+  });
+  const listItem = makeChildComponent("list-item", {
+    declarations: [
+      { id: "list-item/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" } },
+      { id: "list-item/declarations/done", kind: "prop", origin: "own", assertable: false, name: "done", valueType: { kind: "bool" }, defaultValue: false },
+    ],
+  });
+
+  const itemsProp = {
+    id: "task-list/declarations/tasks",
+    kind: "prop" as const,
+    origin: "own" as const,
+    assertable: false as const,
+    name: "tasks",
+    valueType: { kind: "list" as const, of: { kind: "record" as const, fields: { id: { kind: "string" as const }, label: { kind: "string" as const }, done: { kind: "bool" as const } } } },
+    defaultValue: [],
+  };
+
+  const itemTemplate: UsesNode = {
+    id: "task-list/composition/item-template",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "item-template",
+    component: "list-item",
+    resolvedComponent: listItem,
+    props: {
+      label: { expr: parseExpr("task.label") },
+      done: { expr: parseExpr("task.done") },
+    },
+  };
+
+  const listUses: UsesNode = {
+    id: "task-list/composition/list-instance",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "list-instance",
+    component: "list",
+    resolvedComponent: list,
+    root: true,
+    slotContent: { default: { each: { over: "tasks", as: "task", use: "item-template", key: "id" } } },
+  };
+
+  return makeChildComponent("task-list", {
+    declarations: [itemsProp],
+    composition: [listUses, itemTemplate],
+  });
+}
+
+/**
+ * A machine-less `button`-shaped component whose one declared event fires
+ * directly off a `click` trigger — no `states`/`transitions` at all, the
+ * shape that used to never get a click handler wired up regardless of what
+ * it declared (the root cause behind all three `it.fails` tripwires in
+ * `examples/tests/render.test.tsx`, before `EventNode.trigger`/
+ * `lowerRootHandlers` existed).
+ */
+export function makeTriggeredEventFixture(): ComponentNode {
+  return makeChildComponent("press-widget", {
+    declarations: [
+      {
+        id: "press-widget/declarations/press",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "press",
+        payloadType: { kind: "record", fields: {} },
+        trigger: { kind: "event", name: "click" },
+      },
+      { id: "press-widget/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+    ],
+  });
+}
+
+/**
+ * A `profile-card` with a `profile` resource (`list<record{email:string}>`,
+ * 0-or-1) and a `loaded` derived value (`not isEmpty(profile)`) — proves
+ * `resource` reaches the value graph exactly the way `task-list`'s `tasks`
+ * prop did for `each` (§ Phase 4), just via a distinct declaration kind.
+ */
+export function makeResourceFixture(): ComponentNode {
+  return makeChildComponent("profile-card", {
+    declarations: [
+      {
+        id: "profile-card/declarations/profile",
+        kind: "resource",
+        origin: "own",
+        assertable: false,
+        name: "profile",
+        dataType: { kind: "record", fields: { email: { kind: "string" } } },
+      },
+      {
+        id: "profile-card/declarations/loaded",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "loaded",
+        valueType: { kind: "bool" },
+        expr: parseExpr("not isEmpty(profile)"),
+      },
+    ],
+  });
+}
+
+/**
+ * A `dismiss-widget` whose `dismissed` event fires directly off an
+ * `Escape` keydown on its own root — no machine, mirroring
+ * `makeTriggeredEventFixture`'s machine-less shape but for a `kind: "key"`
+ * trigger instead of `kind: "event"` (§ Phase 5d).
+ */
+export function makeKeyTriggeredEventFixture(): ComponentNode {
+  return makeChildComponent("dismiss-widget", {
+    declarations: [
+      {
+        id: "dismiss-widget/declarations/dismissed",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "dismissed",
+        payloadType: { kind: "record", fields: {} },
+        trigger: { kind: "key", key: "Escape" },
+      },
+      { id: "dismiss-widget/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+    ],
+  });
+}
+
+/**
+ * A minimal, slot-free checkbox-shaped component (`checked` prop,
+ * `unchecked`/`checked` states, `pattern-conformance: checkbox`) — the
+ * exact shape the real `examples/specs/checkbox.md` has, purpose-built to
+ * unit-test the checkbox-pattern real `<input>` mechanism (§ Phase 5e) in
+ * isolation from `makeFixture`, which deliberately keeps a neutral pattern
+ * name because it *does* declare slots (a real checkbox can't).
+ */
+export function makeCheckboxPatternFixture(): ComponentNode {
+  return makeChildComponent("check-widget", {
+    declarations: [
+      {
+        id: "check-widget/declarations/checked",
+        kind: "prop",
+        origin: "own",
+        assertable: false,
+        name: "checked",
+        valueType: { kind: "bool" },
+        defaultValue: false,
+      },
+    ],
+    states: [
+      { id: "check-widget/machine/unchecked", kind: "state", origin: "own", assertable: false, name: "unchecked", flags: {} },
+      { id: "check-widget/machine/checked", kind: "state", origin: "own", assertable: false, name: "checked", flags: {} },
+    ],
+    transitions: [
+      {
+        id: "check-widget/machine/toggle",
+        kind: "transition",
+        origin: "own",
+        assertable: false,
+        name: "toggle",
+        from: "unchecked",
+        to: "checked",
+        trigger: { kind: "event", name: "click" },
+      },
+    ],
+    a11y: [
+      {
+        id: "check-widget/a11y/checkbox-pattern",
+        kind: "pattern-conformance",
+        origin: "own",
+        assertable: true,
+        verify: "a11y",
+        pattern: "checkbox",
+      },
+    ],
   });
 }

@@ -1,0 +1,7 @@
+$ loom report examples/specs/list.md --results examples/loom.results.json
+
+not-applicable component            list
+not-applicable slot                 list/declarations/default
+unverifiable   unexpressible        list/claims/reads-as-a-list-not-a-generic-container
+unverified     pattern-conformance  list/a11y/list-pattern
+not-applicable intent               list/prose/intent

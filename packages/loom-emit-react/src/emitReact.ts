@@ -1,27 +1,41 @@
-import type { ComponentNode, EmittedFile, FieldNode, OnWireTarget, UsesNode } from "loom-ir";
+import type { ComponentNode, EmittedFile, FieldNode, Handler, PropNode, ResourceNode, RenderNode } from "loom-ir";
+import { lower, lowerComposition, lowerRootHandlers, hasKeydownHandler } from "loom-ir";
+import type { Expr, LoomType } from "loom-expr";
 import { partClassName } from "loom-emit-styles";
-import { loomTypeToTs } from "./loomTypeToTs.js";
+import {
+  capitalize,
+  camelCase,
+  collectReferencedComponents,
+  condToJs,
+  hasComputedProps,
+  hasDerivedValues,
+  loomTypeToTs,
+  machineLines,
+  machineSeedProp,
+  objectKey,
+  pascalCase,
+} from "loom-emit-core";
 
-function isComputedPropValue(v: unknown): v is { expr: unknown } {
-  return v !== null && typeof v === "object" && !Array.isArray(v) && "expr" in v;
-}
-
-function hasComputedProps(nodes: readonly UsesNode[]): boolean {
-  return nodes.some((n) => Object.values(n.props ?? {}).some(isComputedPropValue));
-}
-
-function capitalize(s: string): string {
-  return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
-}
-
-function pascalCase(slug: string): string {
-  return slug.split("-").map(capitalize).join("");
-}
-
-/** Slot/prop names come from spec slugs and may contain hyphens, which aren't valid in a JS identifier. */
-function camelCase(slug: string): string {
-  const [first, ...rest] = slug.split("-");
-  return [first, ...rest.map(capitalize)].join("");
+/**
+ * `{ propName, fieldName: <name>Value, fieldNameValid: <name>Valid, ... }` —
+ * the env any component-scoped `evaluate()` call (a derived value's own
+ * expr, or `__env` for composed props) is built from. Prop and resource
+ * entries stay shorthand, unquoted (they're already assumed identifier-safe
+ * by the props destructuring above this, unrelated to derived values) — a
+ * resource is destructured under its own raw name exactly like a prop is,
+ * so it needs no different treatment here; field entries go through
+ * `objectKey` since a field name reaching this object-literal position
+ * needs quoting if it isn't already a valid identifier.
+ */
+function valueEnvParts(props: readonly PropNode[], fields: readonly FieldNode[], resources: readonly ResourceNode[] = []): string[] {
+  return [
+    ...props.map((p) => p.name),
+    ...resources.map((r) => r.name),
+    ...fields.flatMap((f) => [
+      `${objectKey(f.name)}: ${camelCase(f.name)}Value`,
+      `${objectKey(`${f.name}Valid`)}: ${camelCase(f.name)}Valid`,
+    ]),
+  ];
 }
 
 /** The default slot maps to React's built-in `children`; every other slot becomes its own named prop. */
@@ -29,127 +43,199 @@ function slotPropName(slotName: string): string {
   return slotName === "default" ? "children" : camelCase(slotName);
 }
 
-function stateLiteral(state: ComponentNode["states"][number]): string {
-  return JSON.stringify({ id: state.name, ...state.flags });
-}
-
 /**
- * One `new Transition({...})` call, guard included as `Guard.from(expr)` —
- * states are plain data (no behavior to encapsulate), but a transition's
- * matching logic and a guard's evaluation are exactly what these classes
- * exist to own, so they're instantiated explicitly rather than left as
- * anonymous nested object literals.
+ * Prints the render tree `lower()` produces for the non-composition path.
+ * Only `slot` is exercised yet (Phase 1b); every other `RenderNode` kind
+ * throws rather than silently rendering nothing, since a component that
+ * needs one isn't supposed to reach this printer until a later phase adds
+ * support for it.
  */
-function transitionLines(transition: ComponentNode["transitions"][number], indent: string): string[] {
-  const lines = [
-    `${indent}new Transition({`,
-    `${indent}  id: ${JSON.stringify(transition.name)},`,
-    `${indent}  from: ${JSON.stringify(transition.from)},`,
-    `${indent}  to: ${JSON.stringify(transition.to)},`,
-    `${indent}  trigger: ${JSON.stringify(transition.trigger)},`,
-  ];
-  if (transition.guard) lines.push(`${indent}  guard: Guard.from(${JSON.stringify(transition.guard)}),`);
-  lines.push(`${indent}}),`);
-  return lines;
-}
-
-/** `const __machine = new LoomMachine({ ... })`, formatted as readable multi-line source rather than one JSON line. */
-function machineLines(component: ComponentNode): string[] {
-  const lines: string[] = [`const __machine = new LoomMachine({`, `  states: [`];
-  for (const state of component.states) lines.push(`    ${stateLiteral(state)},`);
-  lines.push(`  ],`, `  transitions: [`);
-  for (const transition of component.transitions) lines.push(...transitionLines(transition, "    "));
-  lines.push(`  ],`, `});`, ``);
-  return lines;
-}
-
-/** Every distinct component reached by a composition tree, sorted for deterministic import ordering. */
-function collectReferencedComponents(nodes: readonly UsesNode[]): ComponentNode[] {
-  const seen = new Map<string, ComponentNode>();
+function printRenderNodes(nodes: readonly RenderNode[], componentSlug: string, styledParts: ReadonlySet<string>): string[] {
+  const out: string[] = [];
   for (const node of nodes) {
-    if (!seen.has(node.resolvedComponent.name)) seen.set(node.resolvedComponent.name, node.resolvedComponent);
-  }
-  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * A native `<input>` bound to this field's own local state — `value`/
- * `touched` are recomputed/set together on every keystroke, `<name>Valid`
- * is recomputed inline from `evaluate()` each render, and the invalid
- * message (if any) only shows once the field has been touched.
- */
-function renderFieldJsx(field: FieldNode): string {
-  const camel = camelCase(field.name);
-  const Camel = capitalize(camel);
-  const inputType = field.secret ? "password" : "text";
-  const parts = [
-    `<input type=${JSON.stringify(inputType)} name=${JSON.stringify(field.name)} value={${camel}Value} onChange={handle${Camel}Change} aria-invalid={${camel}Touched && !${camel}Valid} />`,
-  ];
-  if (field.invalidMessage) {
-    parts.push(
-      `{${camel}Touched && !${camel}Valid && <span data-loom-field-error=${JSON.stringify(field.name)}>{${JSON.stringify(field.invalidMessage)}}</span>}`
-    );
-  }
-  return `<React.Fragment>${parts.join("")}</React.Fragment>`;
-}
-
-/**
- * Recursively renders one `UsesNode` (and, through `slotContent.*.uses`/
- * `slotContent.*.fields`, its nested children/native fields) as a JSX
- * element. A resolved child's own props interface already types each
- * non-default slot as `React.ReactNode`, so slot content becomes a JSX
- * attribute (`actions={...}`), never raw children — React has no per-slot
- * child-targeting mechanism. A `{ expr }` prop value is evaluated live
- * against `__env` (the enclosing component's own props + field state).
- * `on` wiring adds one or more extra callback invocations reusing the same
- * `on${Capitalize(name)}` naming convention the props interface generator
- * uses elsewhere in this file, with each wire's `payload` sourced from a
- * sibling field's current value or the enclosing component's own prop.
- */
-function renderUsesJsx(node: UsesNode, byName: ReadonlyMap<string, UsesNode>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
-  const ref = node.resolvedComponent;
-  const refName = pascalCase(ref.name);
-  const refSlots = ref.declarations.filter((d) => d.kind === "slot");
-
-  const propAttrs = Object.entries(node.props ?? {}).map(([k, v]) =>
-    isComputedPropValue(v) ? `${k}={evaluate(${JSON.stringify(v.expr)}, __env) === true}` : `${k}={${JSON.stringify(v)}}`
-  );
-
-  const namedSlotAttrs: string[] = [];
-  let defaultChildrenExpr: string | undefined;
-  for (const slot of refSlots) {
-    const content = node.slotContent?.[slot.name];
-    if (!content) continue;
-    const rendered =
-      "text" in content
-        ? JSON.stringify(content.text)
-        : "uses" in content
-          ? `<>${content.uses.map((n) => renderUsesJsx(byName.get(n)!, byName, fieldsByName)).join("")}</>`
-          : `<>${content.fields.map((n) => renderFieldJsx(fieldsByName.get(n)!)).join("")}</>`;
-    if (slot.name === "default") {
-      defaultChildrenExpr = rendered;
+    if (node.kind !== "slot") throw new Error(`printRenderNodes: unsupported render node kind '${node.kind}'`);
+    if (node.name === "default") {
+      out.push(`      {children}`);
     } else {
-      namedSlotAttrs.push(`${slotPropName(slot.name)}={${rendered}}`);
+      const classAttr = styledParts.has(node.name)
+        ? ` className=${JSON.stringify(partClassName(componentSlug, node.name))}`
+        : "";
+      out.push(`      <div data-loom-slot=${JSON.stringify(node.name)}${classAttr}>{${slotPropName(node.name)}}</div>`);
     }
   }
+  return out;
+}
 
-  const onAttrs = Object.entries(node.on ?? {}).map(([childEventName, wireRaw]) => {
-    const wires = Array.isArray(wireRaw) ? wireRaw : [wireRaw];
-    const calls = wires.map((w) => {
-      const target: OnWireTarget = typeof w === "string" ? { event: w } : w;
-      const payloadEntries = Object.entries(target.payload ?? {}).map(
-        ([k, source]) => `${k}: ${fieldsByName.has(source) ? `${camelCase(source)}Value` : source}`
-      );
-      return `on${capitalize(target.event)}?.({ ${payloadEntries.join(", ")} });`;
-    });
-    return `on${capitalize(childEventName)}={() => { ${calls.join(" ")} }}`;
+/**
+ * `over`/`key` on an `each` node are always a plain `ref`/`member` chain by
+ * construction (`lower.ts` only ever builds them that way) — already-scoped
+ * JS values (a destructured prop, an `each`'s own callback parameter), never
+ * something needing a runtime `evaluate()` call.
+ */
+function printBareRef(expr: Expr): string {
+  if (expr.type === "ref") return expr.name;
+  if (expr.type === "member") return `${printBareRef(expr.target)}.${expr.property}`;
+  throw new Error(`printBareRef: unsupported expr type '${expr.type}'`);
+}
+
+/**
+ * A literal prop prints its raw value directly; anything else is a computed
+ * `{expr}` prop, live-evaluated against `__env` — extended with any `each`
+ * idents currently in scope (`boundIdents`), so a template instance nested
+ * inside `tasks.map((task) => ...)` can reference `task` from its own
+ * `{expr}` props. Only a `bool`-typed prop gets the historical `=== true`
+ * coercion (every prop this ever ran against before `each` was bool-typed,
+ * so this keeps that output byte-identical); anything else casts through
+ * `loomTypeToTs` instead, since `evaluate()` only ever returns `LoomValue`.
+ */
+function printPropExpr(expr: Expr, valueType: LoomType, boundIdents: readonly string[]): string {
+  if (expr.type === "literal") return JSON.stringify(expr.value);
+  const env = boundIdents.length > 0 ? `{ ...__env, ${boundIdents.join(", ")} }` : "__env";
+  const call = `evaluate(${JSON.stringify(expr)}, ${env})`;
+  return valueType.kind === "bool" ? `${call} === true` : `(${call} as ${loomTypeToTs(valueType)})`;
+}
+
+/**
+ * A field-sourced payload value carries a `Value` suffix (React's field
+ * state variable is named `<name>Value`); a prop-sourced one prints as-is.
+ */
+function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "emit" }>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
+  const payloadEntries = Object.entries(effect.payload).map(([k, expr]) => {
+    const source = (expr as Extract<Expr, { type: "ref" }>).name;
+    return `${k}: ${fieldsByName.has(source) ? `${camelCase(source)}Value` : source}`;
   });
+  return `on${capitalize(effect.event)}?.({ ${payloadEntries.join(", ")} });`;
+}
 
-  const attrs = [...propAttrs, ...namedSlotAttrs, ...onAttrs];
-  const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
-  return defaultChildrenExpr !== undefined
-    ? `<${refName}${attrsStr}>{${defaultChildrenExpr}}</${refName}>`
-    : `<${refName}${attrsStr} />`;
+/**
+ * `dispatch` calls the same root-scoped `const dispatch = ...` closure
+ * `emitReact`'s main function defines whenever the component has a
+ * machine — always in scope by the time a `dispatch` effect can exist,
+ * since `lowerRootHandlers` only ever produces one from an actual
+ * `TransitionNode.trigger`.
+ */
+function printEffect(effect: Handler["effects"][number], fieldsByName: ReadonlyMap<string, FieldNode>): string {
+  if (effect.kind === "dispatch") return `dispatch(${JSON.stringify(effect.event)});`;
+  if (effect.kind !== "emit") throw new Error(`printEffect: unsupported effect kind '${effect.kind}'`);
+  return printEmitEffect(effect, fieldsByName);
+}
+
+/** React's synthetic event props are camelCase; a multi-word native DOM event name (only `"keydown"` so far) doesn't camelCase by capitalizing alone. */
+function reactEventPropName(domEventName: string): string {
+  return domEventName === "keydown" ? "keyDown" : domEventName;
+}
+
+function printHandlers(handlers: readonly Handler[], fieldsByName: ReadonlyMap<string, FieldNode>): string[] {
+  return handlers.map((h) => {
+    const calls = h.effects.map((e) => printEffect(e, fieldsByName));
+    const propName = `on${capitalize(reactEventPropName(h.on))}`;
+    if (h.key !== undefined) {
+      return `${propName}={(e) => { if (e.key === ${JSON.stringify(h.key)}) { ${calls.join(" ")} } }}`;
+    }
+    return `${propName}={() => { ${calls.join(" ")} }}`;
+  });
+}
+
+/**
+ * A `text`/`each` node needs `{}` braces only when it appears as a JSX
+ * element child (a bare JS string/expression isn't valid JSX text) — as an
+ * attribute value or inside a fragment, the caller already supplies the one
+ * wrapping `{}` an attribute needs. Every other kind already prints valid
+ * JSX on its own.
+ */
+function printElementChild(node: RenderNode, fieldsByName: ReadonlyMap<string, FieldNode>, boundIdents: readonly string[]): string {
+  return node.kind === "text" || node.kind === "each"
+    ? `{${printInline(node, fieldsByName, boundIdents)}}`
+    : printInline(node, fieldsByName, boundIdents);
+}
+
+/**
+ * Prints one lowered composition subtree as a flat JSX expression string —
+ * no internal newlines; only the composed root's `visibleWhen` wrap (handled
+ * by its caller in `emitReact`) is ever multi-line. `slot` doesn't appear in
+ * a composition tree (Phase 1b's path is a distinct, non-composed one), so
+ * it isn't handled here.
+ *
+ * `boundIdents` names every `each` ident currently in scope, innermost last
+ * — threaded down so a prop's `{expr}` (via `printPropExpr`) knows to merge
+ * them into the env it evaluates against. `leadingAttrs` exists for exactly
+ * one caller, `each`'s own case below: injecting `key={...}` as the first
+ * JSX attribute on its single templated child, the same "extra attrs from
+ * the caller" shape `printElement`'s Angular counterpart already uses for
+ * `*ngIf`/`*ngFor`.
+ */
+function printInline(
+  node: RenderNode,
+  fieldsByName: ReadonlyMap<string, FieldNode>,
+  boundIdents: readonly string[] = [],
+  leadingAttrs: readonly string[] = []
+): string {
+  switch (node.kind) {
+    case "text":
+      return JSON.stringify((node.value as Extract<Expr, { type: "literal" }>).value);
+    case "fragment": {
+      const inner = node.children.map((c) => printInline(c, fieldsByName, boundIdents)).join("");
+      return `<>${inner}</>`;
+    }
+    case "when": {
+      const cond = condToJs(node.cond);
+      const inner = node.then.map((c) => printInline(c, fieldsByName, boundIdents)).join("");
+      return `{${cond} && ${inner}}`;
+    }
+    case "each": {
+      const source = printBareRef(node.over);
+      const keyAttrs = node.key ? [`key={${printBareRef(node.key)}}`] : [];
+      const body = node.body.map((c) => printInline(c, fieldsByName, [...boundIdents, node.ident], keyAttrs)).join("");
+      return `${source}.map((${node.ident}) => (${body}))`;
+    }
+    case "element": {
+      const staticAttrs = node.attrs.map((a) => {
+        if (a.kind !== "static") throw new Error(`printInline: unsupported attr kind '${a.kind}'`);
+        return `${a.name}=${JSON.stringify(a.value)}`;
+      });
+      let dynamicAttrs: string[] = [];
+      if (node.tag === "input") {
+        const nameAttr = node.attrs.find((a) => a.kind === "static" && a.name === "name");
+        const camel = camelCase((nameAttr as Extract<typeof nameAttr, { kind: "static" }>).value);
+        const Camel = capitalize(camel);
+        dynamicAttrs = [`value={${camel}Value}`, `onChange={handle${Camel}Change}`, `aria-invalid={${camel}Touched && !${camel}Valid}`];
+      }
+      const attrsStr = [...leadingAttrs, ...staticAttrs, ...dynamicAttrs].join(" ");
+      if (node.children.length === 0) return `<${node.tag} ${attrsStr} />`;
+      const inner = node.children.map((c) => printElementChild(c, fieldsByName, boundIdents)).join("");
+      return `<${node.tag} ${attrsStr}>${inner}</${node.tag}>`;
+    }
+    case "instance": {
+      const refName = pascalCase(node.component.name);
+      const refSlots = node.component.declarations.filter((d) => d.kind === "slot");
+      const refProps = node.component.declarations.filter((d): d is PropNode => d.kind === "prop");
+
+      const propAttrs = Object.entries(node.props).map(([k, expr]) => {
+        const declaredType = refProps.find((p) => p.name === k)!.valueType;
+        return `${k}={${printPropExpr(expr, declaredType, boundIdents)}}`;
+      });
+
+      const namedSlotAttrs: string[] = [];
+      let defaultChildrenExpr: string | undefined;
+      for (const slot of refSlots) {
+        const fillNodes = node.fills[slot.name];
+        if (!fillNodes) continue;
+        const rendered = fillNodes.map((n) => printInline(n, fieldsByName, boundIdents)).join("");
+        if (slot.name === "default") defaultChildrenExpr = rendered;
+        else namedSlotAttrs.push(`${slotPropName(slot.name)}={${rendered}}`);
+      }
+
+      const onAttrs = printHandlers(node.handlers, fieldsByName);
+
+      const attrs = [...leadingAttrs, ...propAttrs, ...namedSlotAttrs, ...onAttrs];
+      const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+      return defaultChildrenExpr !== undefined
+        ? `<${refName}${attrsStr}>{${defaultChildrenExpr}}</${refName}>`
+        : `<${refName}${attrsStr} />`;
+    }
+    default:
+      throw new Error(`printInline: unsupported render node kind '${node.kind}'`);
+  }
 }
 
 /**
@@ -162,10 +248,19 @@ function renderUsesJsx(node: UsesNode, byName: ReadonlyMap<string, UsesNode>, fi
  * instantiated at runtime as a loom-expr `LoomMachine` — the same
  * interpreter loom-emit-tests reuses for generated tests, now wrapped in a
  * typed class instead of an untyped literal — rather than transpiling each
- * guard into bespoke JS. Only a generic `click` interaction is wired up for
- * now (key/pointer triggers are a backend TODO); `MethodNode`s have no
- * React rendering strategy yet and are skipped rather than failing the
- * whole emission (§14 step 5's "skip, don't throw" contract). If any `part`
+ * guard into bespoke JS. Root-level interaction wiring (`lowerRootHandlers`)
+ * only ever produces a `{kind:"event"}`-triggered handler today (key/pointer
+ * triggers stay declarable but inert); `MethodNode`s have no React rendering
+ * strategy yet and are skipped rather than failing the whole emission
+ * (§14 step 5's "skip, don't throw" contract). The root element is a real
+ * `<button type="button">` when the component's `pattern-conformance` names
+ * the `"button"` pattern — `disabled` becomes the native attribute instead
+ * of `aria-disabled` (the browser refuses to fire `click` on a disabled
+ * `<button>` at all, which `aria-disabled` alone never did — nothing
+ * guarded a click handler against a disabled prop before this), and Enter/
+ * Space activation comes free from the browser instead of needing a
+ * hand-wired keyboard trigger. Every other pattern still renders `<div
+ * role="...">`. If any `part`
  * (root or a slot) carries a `TokenRefNode`/`LayoutIntentNode`, its DOM node
  * gets a `className` from `loom-emit-styles`' `partClassName` — the same
  * naming function the CSS backend uses to generate the matching selector —
@@ -189,6 +284,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   const props = component.declarations.filter((d) => d.kind === "prop");
   const events = component.declarations.filter((d) => d.kind === "event");
   const slots = component.declarations.filter((d) => d.kind === "slot");
+  const resources = component.declarations.filter((d): d is ResourceNode => d.kind === "resource");
   const pattern = component.a11y.find((n) => n.kind === "pattern-conformance");
   const disabledProp = props.find((p) => p.name === "disabled");
   // `VisualConformanceNode` carries no CSS (§ Style scope), so it doesn't count toward "this part is styled."
@@ -197,7 +293,8 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   const referencedComponents = collectReferencedComponents(component.composition);
   const fields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
   const fieldsByName = new Map(fields.map((f) => [f.name, f] as const));
-  const needsEvaluate = fields.length > 0 || hasComputedProps(component.composition);
+  const derivedValues = component.declarations.filter((d) => d.kind === "derived");
+  const needsEvaluate = fields.length > 0 || hasComputedProps(component.composition) || hasDerivedValues(component.declarations);
 
   const lines: string[] = [
     `// GENERATED by loom-emit-react. Do not edit by hand.`,
@@ -221,6 +318,10 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(`  /** ${prop.id} */`);
     lines.push(`  ${prop.name}?: ${loomTypeToTs(prop.valueType)};`);
   }
+  for (const resource of resources) {
+    lines.push(`  /** ${resource.id} */`);
+    lines.push(`  ${resource.name}?: Array<${loomTypeToTs(resource.dataType)}>;`);
+  }
   for (const event of events) {
     lines.push(`  /** ${event.id} */`);
     lines.push(`  on${capitalize(event.name)}?: (payload: ${loomTypeToTs(event.payloadType)}) => void;`);
@@ -233,9 +334,10 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
 
   lines.push(`export function ${componentName}(props: ${componentName}Props): React.ReactElement {`);
   const destructured = props.map((p) => `${p.name} = ${JSON.stringify(p.defaultValue ?? null)}`);
+  const resourceDestructured = resources.map((r) => `${r.name} = []`);
   const eventCallbackNames = events.map((e) => `on${capitalize(e.name)}`);
-  if (destructured.length > 0 || slots.length > 0 || eventCallbackNames.length > 0) {
-    const parts = [...destructured, ...slots.map((s) => slotPropName(s.name)), ...eventCallbackNames];
+  if (destructured.length > 0 || resourceDestructured.length > 0 || slots.length > 0 || eventCallbackNames.length > 0) {
+    const parts = [...destructured, ...resourceDestructured, ...slots.map((s) => slotPropName(s.name)), ...eventCallbackNames];
     lines.push(`  const { ${parts.join(", ")} } = props;`);
   }
 
@@ -255,10 +357,24 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   }
   if (fields.length > 0) lines.push(``);
 
+  // A derived value's own expr is checked (composition.ts) against only this component's own
+  // props/fields — never another derived value — so it gets its own inline env, the same
+  // convention FieldNode.validate already uses, rather than depending on __env's construction
+  // order. Only `bool` is supported for now; nothing yet needs another valueType kind.
+  for (const derived of derivedValues) {
+    if (derived.kind !== "derived") continue;
+    if (derived.valueType.kind !== "bool") {
+      throw new Error(`emitReact: derived '${derived.id}' has unsupported valueType kind '${derived.valueType.kind}' (only 'bool' is supported)`);
+    }
+    const envLiteral = `{ ${valueEnvParts(props, fields, resources).join(", ")} }`;
+    lines.push(`  const ${camelCase(derived.name)} = evaluate(${JSON.stringify(derived.expr)}, ${envLiteral}) === true;`);
+  }
+  if (derivedValues.length > 0) lines.push(``);
+
   if (hasComputedProps(component.composition)) {
     const envParts = [
-      ...props.map((p) => p.name),
-      ...fields.flatMap((f) => [`${f.name}: ${camelCase(f.name)}Value`, `${f.name}Valid: ${camelCase(f.name)}Valid`]),
+      ...valueEnvParts(props, fields, resources),
+      ...derivedValues.map((d) => `${objectKey(d.name)}: ${camelCase(d.name)}`),
     ];
     lines.push(`  const __env: any = { ${envParts.join(", ")} };`);
     lines.push(``);
@@ -279,8 +395,20 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(``);
   }
 
+  const isButtonPattern = pattern?.pattern === "button";
+  const isCheckboxPattern = pattern?.pattern === "checkbox";
+  const rootTag = isButtonPattern ? "button" : isCheckboxPattern ? "input" : "div";
+  // The only structural link between "a prop that mirrors current state" and "which state
+  // that is" — see `machineSeedProp`'s own doc comment. Used both to seed the initial
+  // `state` correctly (previously always `__machine.initialState`, ignoring e.g. `checked`
+  // or `expanded` entirely) and, for the checkbox pattern, to know which state means checked.
+  const seedProp = machineSeedProp(component);
+
   if (component.states.length > 0) {
-    lines.push(`  const [state, setState] = React.useState<string>(__machine.initialState);`);
+    const initialState = seedProp
+      ? `${seedProp.name} ? ${JSON.stringify(seedProp.name)} : __machine.initialState`
+      : `__machine.initialState`;
+    lines.push(`  const [state, setState] = React.useState<string>(${initialState});`);
     lines.push(``);
     lines.push(`  const dispatch = (eventName: string) => {`);
     lines.push(`    const env: any = { ${props.map((p) => p.name).join(", ")} };`);
@@ -290,39 +418,61 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(``);
   }
 
+  // A real checkbox's own `checked`/`disabled` DOM properties already convey what
+  // `data-state`/`aria-disabled` existed to express on a `<div role="checkbox">` — and
+  // React warns at runtime if a controlled `checked` input has no `onChange`, so the
+  // trigger's own dispatch handler (still semantically "click", matching the transitions'
+  // own declared trigger name — only the DOM attribute it prints under changes) binds to
+  // `onChange` here instead of `onClick`.
+  const rootHandlers = lowerRootHandlers(component).map((h) =>
+    isCheckboxPattern && h.on === "click" ? { ...h, on: "change" } : h
+  );
+
   lines.push(`  return (`);
-  lines.push(`    <div`);
+  lines.push(`    <${rootTag}`);
   lines.push(`      data-loom-component=${JSON.stringify(component.name)}`);
   if (styledParts.has("root")) lines.push(`      className=${JSON.stringify(partClassName(component.name, "root"))}`);
-  if (component.states.length > 0) lines.push(`      data-state={state}`);
-  if (pattern) lines.push(`      role=${JSON.stringify(pattern.pattern)}`);
-  if (disabledProp) lines.push(`      aria-disabled={disabled}`);
-  if (component.transitions.length > 0) lines.push(`      onClick={() => dispatch("click")}`);
+  if (component.states.length > 0 && !isCheckboxPattern) lines.push(`      data-state={state}`);
+  if (isButtonPattern) {
+    lines.push(`      type="button"`);
+  } else if (isCheckboxPattern) {
+    lines.push(`      type="checkbox"`);
+    if (seedProp) lines.push(`      checked={state === ${JSON.stringify(seedProp.name)}}`);
+  } else if (pattern) {
+    lines.push(`      role=${JSON.stringify(pattern.pattern)}`);
+  }
+  if (disabledProp) lines.push(isButtonPattern || isCheckboxPattern ? `      disabled={disabled}` : `      aria-disabled={disabled}`);
+  // A keydown handler is inert on an element that can never receive focus — `tabIndex={0}`
+  // is what makes a keyboard trigger honestly operable, not just declared.
+  if (hasKeydownHandler(rootHandlers)) lines.push(`      tabIndex={0}`);
+  for (const attr of printHandlers(rootHandlers, fieldsByName)) lines.push(`      ${attr}`);
+  if (isCheckboxPattern) {
+    // `<input>` is a void element — no children, no closing tag. Checkbox declares no
+    // slots, so there is nothing to lose by never reaching the child-printing branch below.
+    lines.push(`    />`);
+    lines.push(`  );`);
+    lines.push(`}`, ``);
+    return [{ path: `${componentName}.tsx`, contents: lines.join("\n") }];
+  }
   lines.push(`    >`);
   if (rootUses) {
-    const byName = new Map(component.composition.map((n) => [n.name, n] as const));
-    const composedJsx = renderUsesJsx(rootUses, byName, fieldsByName);
-    if (rootUses.visibleWhen) {
-      lines.push(`      {${rootUses.visibleWhen} && (`);
-      lines.push(`        ${composedJsx}`);
+    // `visibleWhen`'s multi-line/parenthesized wrap is special-cased here,
+    // at the composed root only — everywhere else `when` prints as a flat
+    // inline `{cond && child}` (see `printInline`'s `"when"` case), matching
+    // today's actual formatting exactly (the whole tree below the root is
+    // built as one unbroken string; only the root wrap ever spans lines).
+    const tree = lowerComposition(rootUses, component);
+    if (tree.kind === "when") {
+      lines.push(`      {${condToJs(tree.cond)} && (`);
+      lines.push(`        ${printInline(tree.then[0]!, fieldsByName)}`);
       lines.push(`      )}`);
     } else {
-      lines.push(`      ${composedJsx}`);
+      lines.push(`      ${printInline(tree, fieldsByName)}`);
     }
   } else {
-    for (const slot of slots) {
-      const varName = slotPropName(slot.name);
-      if (slot.name === "default") {
-        lines.push(`      {children}`);
-      } else {
-        const classAttr = styledParts.has(slot.name)
-          ? ` className=${JSON.stringify(partClassName(component.name, slot.name))}`
-          : "";
-        lines.push(`      <div data-loom-slot=${JSON.stringify(slot.name)}${classAttr}>{${varName}}</div>`);
-      }
-    }
+    lines.push(...printRenderNodes(lower(component), component.name, styledParts));
   }
-  lines.push(`    </div>`);
+  lines.push(`    </${rootTag}>`);
   lines.push(`  );`);
   lines.push(`}`, ``);
 

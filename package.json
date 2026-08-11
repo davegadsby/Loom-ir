@@ -13,17 +13,29 @@
     "clean": "tsc -b --clean",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck:examples": "tsc -p examples/tsconfig.json",
     "examples:generate": "tsx examples/regenerate.ts"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
-    "tsx": "^4.19.0",
+    "@angular/common": "^18.2.14",
+    "@angular/core": "^18.2.0",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.0.0",
     "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "jsdom": "^25.0.0",
     "loom-cli": "workspace:*",
-    "loom-emit-react": "workspace:*",
     "loom-emit-angular": "workspace:*",
+    "loom-emit-react": "workspace:*",
     "loom-emit-styles": "workspace:*",
-    "loom-tokens-import-figma": "workspace:*"
+    "loom-expr": "workspace:*",
+    "loom-tokens-import-figma": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "rxjs": "^7.8.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   }
 }

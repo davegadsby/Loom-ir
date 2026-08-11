@@ -9,6 +9,8 @@
     { "$ref": "#/$defs/slot" },
     { "$ref": "#/$defs/method" },
     { "$ref": "#/$defs/field" },
+    { "$ref": "#/$defs/derived" },
+    { "$ref": "#/$defs/resource" },
     { "$ref": "#/$defs/state" },
     { "$ref": "#/$defs/transition" },
     { "$ref": "#/$defs/guard" },
@@ -63,6 +65,10 @@
             "becomes": {}
           },
           "description": "Auto-fires this event whenever the named prop's value changes to equal `becomes` (never on initial mount)."
+        },
+        "trigger": {
+          "$ref": "#/$defs/trigger",
+          "description": "Fires this event directly off a DOM trigger on this component's own root element — payloadType must be record{} (checked by checkComposition)."
         }
       }
     },
@@ -99,6 +105,25 @@
         "initialValue": { "type": "string", "description": "Defaults to \"\" if omitted." },
         "validate": { "type": "string", "description": "Expression-language text (§6.4), evaluated against `{ [name]: currentValue }`. Omitted means always valid." },
         "invalidMessage": { "type": "string", "description": "Shown once the field has been touched and validate() is currently false." }
+      }
+    },
+    "derived": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "type", "expr"],
+      "properties": {
+        "kind": { "const": "derived" },
+        "type": { "type": "string", "description": "Type-text, e.g. 'bool'." },
+        "expr": { "type": "string", "description": "Expression-language text (§6.4), evaluated against this component's own props/fields." }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "dataType"],
+      "properties": {
+        "kind": { "const": "resource" },
+        "dataType": { "type": "string", "description": "Type-text for ONE loaded item, e.g. 'record{email: string}'. The value graph sees this declaration as list<dataType> — 0 elements before load, 1 once loaded." }
       }
     },
     "state": {
@@ -313,6 +338,24 @@
                 "items": { "type": "string" },
                 "minItems": 1,
                 "description": "Ordered list of this component's own declared FieldNode names, rendered inline as native <input> elements in this slot position."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["each"],
+            "properties": {
+              "each": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["over", "as", "use"],
+                "properties": {
+                  "over": { "type": "string", "description": "Name of a declared prop on this component, of type list<T> — the collection to iterate." },
+                  "as": { "type": "string", "description": "Bound name for each item, in scope inside `use`'s own props/slotContent { expr } values." },
+                  "use": { "type": "string", "description": "Name of a sibling `uses` node in this component's Composition section, instantiated once per item." },
+                  "key": { "type": "string", "description": "Name of a field of T (T must be a record) — used as React's key / Angular's trackBy." }
+                }
               }
             }
           }

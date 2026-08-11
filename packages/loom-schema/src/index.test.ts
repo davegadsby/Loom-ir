@@ -78,6 +78,15 @@ describe("validateNodeBlock", () => {
     expect(block.kind).toBe("event");
   });
 
+  it("accepts an event block with a trigger", () => {
+    const block = validateNodeBlock({
+      kind: "event",
+      payloadType: "record{}",
+      trigger: { kind: "event", name: "click" },
+    });
+    expect(block.kind).toBe("event");
+  });
+
   it("accepts a valid field block with all optional properties", () => {
     const block = validateNodeBlock({
       kind: "field",
@@ -93,6 +102,32 @@ describe("validateNodeBlock", () => {
     expect(validateNodeBlock({ kind: "field" })).toMatchObject({ kind: "field" });
   });
 
+  it("accepts a valid derived block", () => {
+    const block = validateNodeBlock({
+      kind: "derived",
+      type: "bool",
+      expr: "not (usernameValid and passwordValid)",
+    });
+    expect(block.kind).toBe("derived");
+  });
+
+  it("rejects a derived block missing 'expr'", () => {
+    expect(() => validateNodeBlock({ kind: "derived", type: "bool" })).toThrow(SchemaValidationError);
+  });
+
+  it("rejects a derived block missing 'type'", () => {
+    expect(() => validateNodeBlock({ kind: "derived", expr: "true" })).toThrow(SchemaValidationError);
+  });
+
+  it("accepts a valid resource block", () => {
+    const block = validateNodeBlock({ kind: "resource", dataType: "record{email: string}" });
+    expect(block.kind).toBe("resource");
+  });
+
+  it("rejects a resource block missing 'dataType'", () => {
+    expect(() => validateNodeBlock({ kind: "resource" })).toThrow(SchemaValidationError);
+  });
+
   it("accepts slotContent.fields", () => {
     const block = validateNodeBlock({
       kind: "uses",
@@ -100,6 +135,30 @@ describe("validateNodeBlock", () => {
       slotContent: { body: { fields: ["username", "password"] } },
     });
     expect(block.kind).toBe("uses");
+  });
+
+  it("accepts slotContent.each with an optional key", () => {
+    const block = validateNodeBlock({
+      kind: "uses",
+      component: "list",
+      slotContent: { default: { each: { over: "tasks", as: "task", use: "item-template", key: "id" } } },
+    });
+    expect(block.kind).toBe("uses");
+  });
+
+  it("accepts slotContent.each without key", () => {
+    const block = validateNodeBlock({
+      kind: "uses",
+      component: "list",
+      slotContent: { default: { each: { over: "tasks", as: "task", use: "item-template" } } },
+    });
+    expect(block.kind).toBe("uses");
+  });
+
+  it("rejects slotContent.each missing a required field", () => {
+    expect(() =>
+      validateNodeBlock({ kind: "uses", component: "list", slotContent: { default: { each: { over: "tasks", as: "task" } } } })
+    ).toThrow(SchemaValidationError);
   });
 
   it("accepts on as a single onWireTarget object with a payload", () => {

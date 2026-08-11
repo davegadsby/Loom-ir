@@ -4,6 +4,11 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "references": [{ "path": "../loom-ir" }, { "path": "../loom-expr" }, { "path": "../loom-emit-styles" }],
+  "references": [
+    { "path": "../loom-ir" },
+    { "path": "../loom-expr" },
+    { "path": "../loom-emit-styles" },
+    { "path": "../loom-emit-core" }
+  ],
   "include": ["src"]
 }

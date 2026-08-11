@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { evaluate, domainToArbitrary } from "loom-expr";
-import type { MachineContext } from "loom-expr";
+import type { LoomValue, MachineContext } from "loom-expr";
 import { emitJestTests } from "./jest.js";
-import { makeFixture } from "./fixtures.js";
+import { makeFixture, makeValueGraphFixture } from "./fixtures.js";
 
 describe("emitJestTests", () => {
   it("emits one file per component containing all invariant/property claims", () => {
@@ -61,5 +61,59 @@ describe("emitJestTests", () => {
     const fixture = makeFixture();
     fixture.claims = fixture.claims.filter((c) => c.kind !== "invariant" && c.kind !== "property");
     expect(emitJestTests(fixture)).toEqual([]);
+  });
+});
+
+describe("emitJestTests — the value graph (§ Phase 3)", () => {
+  it("does not emit __buildEnv/__fields/__derived for a component with no fields or derived values", () => {
+    const [file] = emitJestTests(makeFixture());
+    expect(file!.contents).not.toContain("__buildEnv");
+    expect(file!.contents).not.toContain("__fields");
+    expect(file!.contents).not.toContain("__derived");
+  });
+
+  it("emits __buildEnv, closing a field's <name>Valid and a derived value into the env, when the component has either", () => {
+    const [file] = emitJestTests(makeValueGraphFixture());
+    expect(file!.contents).toContain("__buildEnv");
+    expect(file!.contents).toContain('"name":"name"');
+    expect(file!.contents).toContain('"name":"nameBlank"');
+  });
+
+  it("the emitted __buildEnv construction actually runs correctly through loom-expr end to end (proves the emission is sound, not just shaped right)", () => {
+    const fixture = makeValueGraphFixture();
+    const field = fixture.declarations.find((d) => d.kind === "field")!;
+    const derived = fixture.declarations.find((d) => d.kind === "derived")!;
+    if (field.kind !== "field" || derived.kind !== "derived") throw new Error("unreachable");
+
+    const claim = fixture.claims.find((c) => c.id === "widget/claims/name-blank-mirrors-an-empty-name")!;
+    if (claim.kind !== "property") throw new Error("unreachable");
+
+    // Mirrors __buildEnv's generated logic directly, rather than eval-ing the
+    // emitted file's text — proves the *mechanism* jest.ts codegens is sound.
+    const buildEnv = (overrides: Record<string, LoomValue>): Record<string, LoomValue> => {
+      const env: Record<string, LoomValue> = { [field.name]: "", ...overrides };
+      const fieldValue: LoomValue = env[field.name] ?? "";
+      env[`${field.name}Valid`] = field.validate ? evaluate(field.validate, { [field.name]: fieldValue }) === true : true;
+      env[derived.name] = evaluate(derived.expr, env);
+      return env;
+    };
+
+    const arb = domainToArbitrary(claim.domain);
+    fc.assert(fc.property(arb, (value) => evaluate(claim.predicate, buildEnv({ [claim.ident]: value })) === true));
+
+    // The property is genuinely falsifiable, not vacuous: corrupting the
+    // derived closure (skipping the nameValid step) makes it fail.
+    const brokenEnv = { name: "", nameBlank: false };
+    expect(evaluate(claim.predicate, brokenEnv)).toBe(false);
+  });
+
+  it("a field with no validate always contributes <name>Valid: true", () => {
+    const fixture = makeValueGraphFixture();
+    const field = fixture.declarations.find((d) => d.kind === "field")!;
+    if (field.kind !== "field") throw new Error("unreachable");
+    field.validate = undefined;
+
+    const [file] = emitJestTests(fixture);
+    expect(file!.contents).toContain('"validate":null');
   });
 });

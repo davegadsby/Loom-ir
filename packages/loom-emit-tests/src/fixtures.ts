@@ -1,4 +1,5 @@
 import type { ComponentNode } from "loom-ir";
+import { parseExpr } from "loom-expr";
 
 /** A small hand-built fixture exercising invariant/property claims, a path and a11y nodes. */
 export function makeFixture(): ComponentNode {
@@ -97,6 +98,50 @@ export function makeFixture(): ComponentNode {
     composition: [],
     prose: [],
   };
+  return component;
+}
+
+/**
+ * `makeFixture` plus a `FieldNode` and a `DerivedNode`, and a `property`
+ * claim whose predicate references the derived value by name — exercises
+ * `emitJestTests`' value-graph env construction (`__buildEnv`), not just
+ * the plain-props path `makeFixture` alone covers.
+ */
+export function makeValueGraphFixture(): ComponentNode {
+  const component = makeFixture();
+  component.declarations = [
+    ...component.declarations,
+    {
+      id: "widget/declarations/name",
+      kind: "field",
+      origin: "own",
+      assertable: false,
+      name: "name",
+      validate: parseExpr("len(name) > 0"),
+    },
+    {
+      id: "widget/declarations/name-blank",
+      kind: "derived",
+      origin: "own",
+      assertable: false,
+      name: "nameBlank",
+      valueType: { kind: "bool" },
+      expr: parseExpr("not nameValid"),
+    },
+  ];
+  component.claims = [
+    ...component.claims,
+    {
+      id: "widget/claims/name-blank-mirrors-an-empty-name",
+      kind: "property",
+      origin: "own",
+      assertable: true,
+      verify: "unit",
+      ident: "name",
+      domain: { kind: "type", type: { kind: "string" } },
+      predicate: parseExpr('nameBlank == (name == "")'),
+    },
+  ];
   return component;
 }
 

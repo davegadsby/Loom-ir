@@ -16,13 +16,14 @@ export interface ButtonProps {
 export function Button(props: ButtonProps): React.ReactElement {
   const { disabled = false, variant = "primary", children, onPress } = props;
   return (
-    <div
+    <button
       data-loom-component="button"
       className="loom-button"
-      role="button"
-      aria-disabled={disabled}
+      type="button"
+      disabled={disabled}
+      onClick={() => { onPress?.({  }); }}
     >
       {children}
-    </div>
+    </button>
   );
 }

@@ -1,0 +1,10 @@
+$ loom report examples/specs/task-list.md --results examples/loom.results.json
+
+not-applicable component            task-list
+not-applicable prop                 task-list/declarations/tasks
+not-applicable derived              task-list/declarations/nonempty
+unverified     property             task-list/claims/nonempty-mirrors-whether-the-list-is-empty
+not-applicable uses                 task-list/composition/list-instance
+not-applicable uses                 task-list/composition/item-template
+not-applicable intent               task-list/prose/intent
+not-applicable rationale            task-list/prose/rationale

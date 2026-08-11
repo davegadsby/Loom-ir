@@ -1,0 +1,5 @@
+$ loom validate examples/specs/list-item.md --results examples/loom.results.json
+
+emission coverage:    50.0% (1/2)
+result coverage:      0.0% (0/1)
+expressibility ratio: 50.0% (1/2)

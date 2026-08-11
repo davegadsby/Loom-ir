@@ -184,6 +184,7 @@ function buildDeclarationNode(componentSlug: string, block: RawNodeBlock): Decla
         name: block.slug,
         payloadType: parseTypeText(yaml.payloadType as string),
         firesWhen: yaml.firesWhen as EventNode["firesWhen"],
+        trigger: yaml.trigger as EventNode["trigger"],
       };
     case "slot":
       return { ...envelope, kind: "slot", name: block.slug };
@@ -196,6 +197,21 @@ function buildDeclarationNode(componentSlug: string, block: RawNodeBlock): Decla
         initialValue: yaml.initialValue as string | undefined,
         validate: yaml.validate ? parseExpr(yaml.validate as string) : undefined,
         invalidMessage: yaml.invalidMessage as string | undefined,
+      };
+    case "derived":
+      return {
+        ...envelope,
+        kind: "derived",
+        name: block.slug,
+        valueType: parseTypeText(yaml.type as string),
+        expr: parseExpr(yaml.expr as string),
+      };
+    case "resource":
+      return {
+        ...envelope,
+        kind: "resource",
+        name: block.slug,
+        dataType: parseTypeText(yaml.dataType as string),
       };
     case "method": {
       const rawParams = (yaml.params as Array<{ name: string; type: string }> | undefined) ?? [];

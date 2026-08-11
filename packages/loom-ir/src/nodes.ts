@@ -28,6 +28,27 @@ export interface EventNode extends LoomNodeEnvelope {
   payloadType: LoomType;
   /** Auto-fires this event whenever the named prop's value changes to equal `becomes` (never on initial mount). */
   firesWhen?: { prop: string; becomes: LoomValue };
+  /**
+   * Fires this event directly off a DOM trigger on this component's own
+   * root element — the same `Trigger` shape a `TransitionNode` uses, so a
+   * plain (machine-less) leaf like `button` can declare "`press` fires on
+   * click" without needing a whole machine just to react to one
+   * interaction. Two kinds are wired up by either emitter today:
+   * `kind: "event"` (a named DOM event) and `kind: "key"` (a `keydown`,
+   * filtered to that one key — `lowerRootHandlers` also adds `tabIndex={0}`/
+   * `tabindex="0"` to the root whenever a `key` trigger is present, since a
+   * keydown handler is inert on an unfocusable element; actually moving
+   * focus there — autofocus-on-open, a focus trap — is separate,
+   * out-of-scope work). `kind: "pointer"` stays declarable but inert, same
+   * as before this field existed. A component may declare at most one
+   * *distinct* keyboard-trigger key across all its events (checked by
+   * `checkComposition`) — both backends can only bind one `keydown` handler
+   * per root element. Payload is always empty (`{}`) — a triggered event's
+   * own `payloadType` must therefore be `record{}` with no fields (checked
+   * by `checkComposition`); sourcing a real payload from DOM/component
+   * state is a bigger mechanism this doesn't attempt.
+   */
+  trigger?: Trigger;
 }
 
 export interface SlotNode extends LoomNodeEnvelope {
@@ -65,7 +86,64 @@ export interface FieldNode extends LoomNodeEnvelope {
   invalidMessage?: string;
 }
 
-export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode | FieldNode;
+/**
+ * A named, typed value computed from this component's own props and fields
+ * — never rendered on its own, but addressable (`component/declarations/<slug>`,
+ * same as any other declaration), so a claim can eventually reference it by
+ * name once the claim language reaches the value graph. Unlike an anonymous
+ * `{ expr }` computed `UsesNode` prop (§ Composition), which is scoped to one
+ * composed instance, a `DerivedNode` is named once and can be referenced from
+ * multiple places — including a composed prop's own `{ expr }`, by name,
+ * instead of repeating the expression. `expr` is checked against this
+ * component's own props/fields only, never another `DerivedNode` — avoids
+ * needing a dependency ordering or cycle check in this first pass.
+ *
+ * Known gap: `name` follows the same kebab-case slug convention every other
+ * declaration uses, but `loom-expr`'s identifier lexer has no hyphen in its
+ * grammar — `parseExpr("submit-disabled")` parses as the binop
+ * `submit - disabled`, not a single ref, and fails to typecheck as an
+ * unresolved reference. A multi-word `derived` name can therefore never
+ * actually be *referenced* from expression text (only declared) until that's
+ * addressed. This isn't new here — it silently affects any kebab-case prop
+ * or field name too, just unexercised until something needed referencing
+ * one from expression text. Not fixed in this pass; name a `derived` value
+ * you intend to reference elsewhere as a single word for now.
+ */
+export interface DerivedNode extends LoomNodeEnvelope {
+  kind: "derived";
+  name: string;
+  valueType: LoomType;
+  expr: Expr;
+}
+
+/**
+ * A named, typed async value the consumer provides as a 0-or-1-element
+ * list — "not yet loaded" is the empty list, "loaded" is one element.
+ * Deliberately `list<dataType>`, never `option<T>`: `list<T>` already
+ * works end to end through the domain grammar/typecheck/evaluate/sampling
+ * machinery (`task-list`'s `tasks` proved it — § Phase 4), while
+ * `option<T>` would need a null literal, option-aware `==`, and narrowing
+ * — real, separate `loom-expr` parser/typecheck/evaluate work that would
+ * also have to reship through `loom-emit-tests`' embedded interpreter.
+ *
+ * This pass gives `resource` the exact runtime shape a plain `list<T>`
+ * prop already has — a consumer-provided `@Input()`/prop defaulting to
+ * `[]`, nothing internally generated or fetched. What makes it a
+ * `resource` and not a `prop` is purely the *kind*: a distinctly-named,
+ * addressable declaration the value graph (a `derived` value, a claim)
+ * can reach as `list<dataType>`, the same mechanism `task-list`'s
+ * `nonempty` already reaches `tasks` through. Actually performing an
+ * async fetch — an `invoke` effect (declared inert in `render.ts` since
+ * `RenderNode` was introduced whole), a loading flag, an error state — is
+ * explicitly out of scope for this pass; see `AGENTS.md`'s Known Gaps.
+ */
+export interface ResourceNode extends LoomNodeEnvelope {
+  kind: "resource";
+  name: string;
+  dataType: LoomType;
+}
+
+export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode | FieldNode | DerivedNode | ResourceNode;
 
 // ---------------------------------------------------------------------------
 // Machine
@@ -228,9 +306,41 @@ export interface OnWireTarget {
 /** A bare string is sugar for `{ event: string }` — an empty-payload forward, the only shape `on` originally had. */
 export type OnWire = string | OnWireTarget;
 
+/**
+ * Renders one sibling `UsesNode` once per element of a list-typed prop on
+ * *this* component — the one iteration mechanism the composition surface
+ * has. `over` names that prop (must resolve to `list<T>`); `as` is the
+ * bound name each rendered instance's own `{expr}` props/`slotContent` may
+ * reference (checked against `T`, the list's element type — see
+ * `checkComposition`'s `bound` typecheck extension); `use` names the
+ * sibling `UsesNode` instantiated once per element, the same way `uses`
+ * names one instantiated exactly once; `key` (optional) names a field of
+ * `T` — `T` must be a `record` for `key` to be set at all — used as
+ * React's `key`/Angular's `trackBy`.
+ *
+ * `use`'s own node is claimed by this `each`, the same way a plain
+ * `slotContent.*.uses` entry claims a node — it must not *also* appear in a
+ * `uses` list, and (like every other composition node) must be reachable
+ * from the tree's one root.
+ *
+ * Known gap, same one `DerivedNode` already documents: `as` follows the
+ * same bare-identifier convention every bound name needs, but a hyphenated
+ * `as` can be declared here yet never actually *referenced* from the
+ * template node's `{expr}` values, for the same `loom-expr` lexer reason.
+ * Give `as` a single word.
+ */
+export interface EachSlotContent {
+  each: {
+    over: string;
+    as: string;
+    use: string;
+    key?: string;
+  };
+}
+
 export interface UsesNode extends LoomNodeEnvelope {
   kind: "uses";
-  /** This instance's own local name — referenced by other UsesNodes' slotContent.*.uses. */
+  /** This instance's own local name — referenced by other UsesNodes' slotContent.*.uses, or by an `each.use`. */
   name: string;
   /** Sibling spec slug to instantiate, resolved like `extends`. */
   component: SpecRef;
@@ -240,8 +350,8 @@ export interface UsesNode extends LoomNodeEnvelope {
   root?: boolean;
   /** Literal or live-computed prop values passed to the child instance. */
   props?: Record<string, PropValue>;
-  /** Per-slot-name literal text, an ordered list of other UsesNode `name`s, or a list of this component's own declared FieldNode names to render natively in that slot. */
-  slotContent?: Record<string, { text: string } | { uses: string[] } | { fields: string[] }>;
+  /** Per-slot-name literal text, an ordered list of other UsesNode `name`s, this component's own declared FieldNode names to render natively, or an `each` iterating a list-typed prop. */
+  slotContent?: Record<string, { text: string } | { uses: string[] } | { fields: string[] } | EachSlotContent>;
   /** Maps this embedded child instance's declared event name to one or more of this component's own declared events to fire. */
   on?: Record<string, OnWire | OnWire[]>;
   /** Root node only: name of a bool prop on this component gating whether the composed subtree renders at all. */
