@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lower, lowerComposition, lowerRootHandlers } from "./lower.js";
+import { lower, lowerComposition, lowerRootHandlers, hasKeydownHandler } from "./lower.js";
 import { makeCheckboxFixture } from "./testFixtures.js";
 import type { ComponentNode, EventNode, FieldNode, SlotNode, UsesNode } from "./nodes.js";
 import type { RenderNode } from "./render.js";
@@ -370,8 +370,8 @@ describe("lowerRootHandlers", () => {
     ]);
   });
 
-  it("does not produce a handler for a key/pointer trigger — declarable but inert, same as before this existed", () => {
-    const keyTriggered: EventNode = {
+  it("lowers a declared event's kind:key trigger to a keydown handler carrying its key (§ Phase 5d)", () => {
+    const activated: EventNode = {
       id: "widget/declarations/activated",
       kind: "event",
       origin: "own",
@@ -380,7 +380,72 @@ describe("lowerRootHandlers", () => {
       payloadType: { kind: "record", fields: {} },
       trigger: { kind: "key", key: "Enter" },
     };
-    const noMachine: ComponentNode = { ...makeCheckboxFixture(), states: [], transitions: [], declarations: [keyTriggered] };
+    const noMachine: ComponentNode = { ...makeCheckboxFixture(), states: [], transitions: [], declarations: [activated] };
+    expect(lowerRootHandlers(noMachine)).toEqual([
+      { on: "keydown", key: "Enter", effects: [{ kind: "emit", event: "activated", payload: {} }] },
+    ]);
+  });
+
+  it("merges two declared events sharing the exact same key into one keydown handler", () => {
+    const dismissed: EventNode = {
+      id: "widget/declarations/dismissed",
+      kind: "event",
+      origin: "own",
+      assertable: false,
+      name: "dismissed",
+      payloadType: { kind: "record", fields: {} },
+      trigger: { kind: "key", key: "Escape" },
+    };
+    const cancelled: EventNode = {
+      id: "widget/declarations/cancelled",
+      kind: "event",
+      origin: "own",
+      assertable: false,
+      name: "cancelled",
+      payloadType: { kind: "record", fields: {} },
+      trigger: { kind: "key", key: "Escape" },
+    };
+    const noMachine: ComponentNode = { ...makeCheckboxFixture(), states: [], transitions: [], declarations: [dismissed, cancelled] };
+    expect(lowerRootHandlers(noMachine)).toEqual([
+      {
+        on: "keydown",
+        key: "Escape",
+        effects: [
+          { kind: "emit", event: "dismissed", payload: {} },
+          { kind: "emit", event: "cancelled", payload: {} },
+        ],
+      },
+    ]);
+  });
+
+  it("does not produce a handler for a pointer trigger — declarable but inert", () => {
+    const pointerTriggered: EventNode = {
+      id: "widget/declarations/activated",
+      kind: "event",
+      origin: "own",
+      assertable: false,
+      name: "activated",
+      payloadType: { kind: "record", fields: {} },
+      trigger: { kind: "pointer", name: "hover" },
+    };
+    const noMachine: ComponentNode = { ...makeCheckboxFixture(), states: [], transitions: [], declarations: [pointerTriggered] };
     expect(lowerRootHandlers(noMachine)).toEqual([]);
+  });
+
+  it("does not wire a machine transition's key trigger to dispatch — Transition.matches still hardcodes kind:event (§ Phase 5a)", () => {
+    const keyTransition = { ...makeCheckboxFixture().transitions[0]!, trigger: { kind: "key" as const, key: "Enter" } };
+    const withKeyTransition: ComponentNode = { ...makeCheckboxFixture(), transitions: [keyTransition] };
+    expect(lowerRootHandlers(withKeyTransition)).toEqual([]);
+  });
+});
+
+describe("hasKeydownHandler", () => {
+  it("is true when lowerRootHandlers produced a keydown handler", () => {
+    expect(hasKeydownHandler([{ on: "keydown", key: "Escape", effects: [] }])).toBe(true);
+  });
+
+  it("is false otherwise", () => {
+    expect(hasKeydownHandler([{ on: "click", effects: [] }])).toBe(false);
+    expect(hasKeydownHandler([])).toBe(false);
   });
 });

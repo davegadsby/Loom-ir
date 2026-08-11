@@ -1,0 +1,9 @@
+$ loom report examples/specs/dismiss-banner.md --results examples/loom.results.json
+
+not-applicable component            dismiss-banner
+not-applicable slot                 dismiss-banner/declarations/default
+not-applicable event                dismiss-banner/declarations/dismissed
+unverifiable   unexpressible        dismiss-banner/claims/escape-only-dismisses-not-other-keys
+unverified     pattern-conformance  dismiss-banner/a11y/alert-pattern
+not-applicable intent               dismiss-banner/prose/intent
+not-applicable rationale            dismiss-banner/prose/rationale

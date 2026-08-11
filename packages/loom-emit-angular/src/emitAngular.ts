@@ -1,5 +1,5 @@
 import type { Attr, ComponentNode, DerivedNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode, ResourceNode, UsesNode } from "loom-ir";
-import { lower, lowerComposition, lowerRootHandlers } from "loom-ir";
+import { lower, lowerComposition, lowerRootHandlers, hasKeydownHandler } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import {
   capitalize,
@@ -135,9 +135,21 @@ function printEffect(effect: Handler["effects"][number]): string {
   return printEmitEffect(effect);
 }
 
+/**
+ * Angular's native DOM event bindings use the literal event name (`h.on`
+ * already is one, e.g. `"keydown"` — no camelCasing needed the way React's
+ * synthetic props need). Its template-statement grammar has no `if`, so a
+ * `key`-guarded handler repeats the `$event.key === '<key>'` guard before
+ * each effect (`&&` short-circuit) rather than generating a class method —
+ * each guarded statement is independently valid, semicolon-joined exactly
+ * like an unguarded handler's effects already are.
+ */
 function printHandlers(handlers: readonly Handler[]): string[] {
   return handlers.map((h) => {
-    const calls = h.effects.map((e) => printEffect(e));
+    const calls =
+      h.key !== undefined
+        ? h.effects.map((e) => `$event.key === '${h.key}' && ${printEffect(e)}`)
+        : h.effects.map((e) => printEffect(e));
     return `(${h.on})="${calls.join("; ")}"`;
   });
 }
@@ -368,7 +380,11 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     attrs.push(`[attr.role]="'${pattern.pattern}'"`);
   }
   if (disabledProp) attrs.push(isButtonPattern ? `[disabled]="disabled"` : `[attr.aria-disabled]="disabled"`);
-  attrs.push(...printHandlers(lowerRootHandlers(component)));
+  const rootHandlers = lowerRootHandlers(component);
+  // A keydown handler is inert on an element that can never receive focus — `tabindex="0"`
+  // is what makes a keyboard trigger honestly operable, not just declared.
+  if (hasKeydownHandler(rootHandlers)) attrs.push(`tabindex="0"`);
+  attrs.push(...printHandlers(rootHandlers));
   // Angular projects by CSS selector against the light DOM, not by prop —
   // a named slot becomes `<ng-content select="[slot=name]">`, matching
   // `<div slot="name">` markup the consumer provides. The selector-less

@@ -1,7 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitAngular } from "./emitAngular.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture, makeEachFixture, makeResourceFixture } from "./fixtures.js";
+import {
+  makeFixture,
+  makeStyledFixture,
+  makeCompositionFixture,
+  makeLoginFixture,
+  makeDerivedFixture,
+  makeEachFixture,
+  makeResourceFixture,
+  makeKeyTriggeredEventFixture,
+} from "./fixtures.js";
 
 describe("emitAngular", () => {
   it("emits one *.component.ts file per component", () => {
@@ -250,6 +259,20 @@ describe("emitAngular — each (iteration)", () => {
       { key: "a", label: "Buy milk", done: false },
       { key: "b", label: "Walk dog", done: true },
     ]);
+  });
+});
+
+describe("emitAngular — EventNode.trigger kind: key (real keyboard triggers, § Phase 5d)", () => {
+  it("binds (keydown) guarded to the declared key with &&, and makes the root focusable", () => {
+    const [file] = emitAngular(makeKeyTriggeredEventFixture());
+    expect(file!.contents).toContain('tabindex="0"');
+    expect(file!.contents).toContain(`(keydown)="$event.key === 'Escape' && dismissed.emit({  })"`);
+  });
+
+  it("does not add tabindex or a keydown binding to a component with no key trigger", () => {
+    const [file] = emitAngular(makeFixture()); // click trigger only (via its machine)
+    expect(file!.contents).not.toContain("tabindex");
+    expect(file!.contents).not.toContain("(keydown)");
   });
 });
 

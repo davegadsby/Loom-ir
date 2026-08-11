@@ -39,8 +39,11 @@ export type Attr =
   | { kind: "class"; part: string };
 
 export interface Handler {
+  /** The native DOM event name this handler binds to (e.g. `"click"`, `"keydown"`) — Angular prints it as-is; React maps it to its camelCase synthetic-event prop name. */
   on: string;
   effects: Effect[];
+  /** Only meaningful when `on === "keydown"`: restricts these effects to firing only when the pressed key matches (`KeyboardEvent.key`). A component may have at most one distinct keyed-trigger key — `checkComposition` enforces this, since both backends can only bind one `keydown` handler on a root element. */
+  key?: string;
 }
 
 export type Effect =

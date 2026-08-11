@@ -105,17 +105,26 @@ All four are checked in CI (`.github/workflows/ci.yml`).
 - Fixed: a machine-less component's own declared events used to never fire
   through generated code at all (only a machine-backed transition ever got
   a click handler). `EventNode.trigger` + `lowerRootHandlers`
-  (`packages/loom-ir/src/lower.ts`) now wire a real click handler for any
-  declared event that names a `{kind: "event", name: "click"}` trigger —
-  see `examples/specs/button.md`'s `press` event. Still not handled: a
-  *machine-driven* state change never fires a matching declared event on
-  its own (`checkbox.md`'s `change` event, e.g., is still never invoked —
-  nothing links a `TransitionNode` to which event, if any, should fire
-  when it's taken); only an event with its own explicit `trigger` does.
-- Keyboard/pointer triggers are parsed but never wired to real DOM events;
-  only a `{kind: "event", name: "click"}` trigger (the only kind any
-  current example uses, for a machine transition or a declared event
-  alike) dispatches. `key`/`pointer` stay declarable but inert.
+  (`packages/loom-ir/src/lower.ts`) now wire a real handler for any
+  declared event that names its own `trigger` — `{kind: "event", name:
+  "..."}` (a named DOM event, e.g. `button.md`'s `press`/click) or
+  `{kind: "key", key: "..."}` (a `keydown`, filtered to that one key, e.g.
+  `dismiss-banner.md`'s `dismissed`/Escape — § Phase 5d). A `key` trigger
+  also gets `tabIndex={0}`/`tabindex="0"` on the root, since a keydown
+  handler is inert on an unfocusable element; actually moving focus there
+  (autofocus-on-mount, a focus trap) is separate, out-of-scope work. A
+  component may declare at most one *distinct* keyboard-trigger key across
+  all its events (`checkComposition` throws otherwise) — both backends can
+  only bind one `keydown` handler per root element. `{kind: "pointer"}`
+  stays declarable but inert. Still not handled: (1) a *machine-driven*
+  state change never fires a matching declared event on its own
+  (`checkbox.md`'s `change` event, e.g., is still never invoked — nothing
+  links a `TransitionNode` to which event, if any, should fire when it's
+  taken); only an event with its own explicit `trigger` does. (2) A
+  *machine transition's* own `key`/`pointer` trigger is never wired to
+  `dispatch` either — `LoomMachine`'s `Transition.matches` still hardcodes
+  `trigger.kind === "event"` as a match requirement, so wiring one would
+  emit a `dispatch` call that can never actually match.
 - `loom-expr` is intentionally first-order (no user-defined functions, no
   `map`/`filter`, no way for a quantifier to range over a list-valued
   expression) — this is a deliberate design boundary, not an oversight. See

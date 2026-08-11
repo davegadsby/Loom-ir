@@ -1,5 +1,5 @@
 import { typecheck, typeEquals, typeToString, type Expr, type LoomType, type TypecheckContext } from "loom-expr";
-import type { ComponentNode, DerivedNode, EventNode, FieldNode, OnWireTarget, PropNode, PropValue, ResourceNode } from "./nodes.js";
+import type { ComponentNode, DerivedNode, EventNode, FieldNode, OnWireTarget, PropNode, PropValue, ResourceNode, Trigger } from "./nodes.js";
 
 export class CompositionCheckError extends Error {}
 
@@ -94,6 +94,23 @@ export function checkComposition(component: ComponentNode): void {
         );
       }
     }
+  }
+
+  // Both backends can only bind one `keydown` handler on a root element, so at most one
+  // distinct key may be wired across this component's own declared-event triggers —
+  // `lowerRootHandlers` groups by (DOM name, key), which would otherwise silently produce
+  // two competing `keydown` handlers with no way to print both.
+  const keyTriggerKeys = new Set(
+    component.declarations
+      .filter((d): d is EventNode => d.kind === "event")
+      .map((d) => d.trigger)
+      .filter((t): t is Extract<Trigger, { kind: "key" }> => t?.kind === "key")
+      .map((t) => t.key)
+  );
+  if (keyTriggerKeys.size > 1) {
+    throw new CompositionCheckError(
+      `component '${component.id}' declares more than one distinct keyboard trigger key (${[...keyTriggerKeys].join(", ")}) — only one keydown-bound key is supported per component`
+    );
   }
 
   const nodes = component.composition;

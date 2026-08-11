@@ -9,6 +9,7 @@ import {
   makeDerivedFixture,
   makeEachFixture,
   makeTriggeredEventFixture,
+  makeKeyTriggeredEventFixture,
   makeResourceFixture,
 } from "./fixtures.js";
 
@@ -301,6 +302,20 @@ describe("emitReact — EventNode.trigger (real triggers, no machine required)",
     const onClickCount = (file!.contents.match(/onClick=/g) ?? []).length;
     expect(onClickCount).toBe(1);
     expect(file!.contents).toContain('onClick={() => { dispatch("click"); onActivated?.({  }); }}');
+  });
+});
+
+describe("emitReact — EventNode.trigger kind: key (real keyboard triggers, § Phase 5d)", () => {
+  it("wires an onKeyDown handler guarded to the declared key, and makes the root focusable", () => {
+    const [file] = emitReact(makeKeyTriggeredEventFixture());
+    expect(file!.contents).toContain("tabIndex={0}");
+    expect(file!.contents).toContain('onKeyDown={(e) => { if (e.key === "Escape") { onDismissed?.({  }); } }}');
+  });
+
+  it("does not add tabIndex or a keydown handler to a component with no key trigger", () => {
+    const [file] = emitReact(makeTriggeredEventFixture()); // click trigger only
+    expect(file!.contents).not.toContain("tabIndex");
+    expect(file!.contents).not.toContain("onKeyDown");
   });
 });
 

@@ -554,3 +554,26 @@ export function makeResourceFixture(): ComponentNode {
     ],
   });
 }
+
+/**
+ * A `dismiss-widget` whose `dismissed` event fires directly off an
+ * `Escape` keydown on its own root — no machine, mirroring
+ * `makeTriggeredEventFixture`'s machine-less shape but for a `kind: "key"`
+ * trigger instead of `kind: "event"` (§ Phase 5d).
+ */
+export function makeKeyTriggeredEventFixture(): ComponentNode {
+  return makeChildComponent("dismiss-widget", {
+    declarations: [
+      {
+        id: "dismiss-widget/declarations/dismissed",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "dismissed",
+        payloadType: { kind: "record", fields: {} },
+        trigger: { kind: "key", key: "Escape" },
+      },
+      { id: "dismiss-widget/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+    ],
+  });
+}

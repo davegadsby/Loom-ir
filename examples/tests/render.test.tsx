@@ -21,6 +21,7 @@ import { ConfirmationDialog } from "../generated/react/ConfirmationDialog";
 import { SignupDialog } from "../generated/react/SignupDialog";
 import { TaskList } from "../generated/react/TaskList";
 import { ProfileCard } from "../generated/react/ProfileCard";
+import { DismissBanner } from "../generated/react/DismissBanner";
 
 afterEach(cleanup);
 
@@ -253,5 +254,27 @@ describe("ProfileCard — resource: an async value reaches the value graph as li
   it("mounts with a consumer-provided, already-loaded resource — proves the emitted derived getter evaluates against a real one-element array without throwing", () => {
     const { container } = render(<ProfileCard profile={[{ name: "Ada Lovelace", email: "ada@example.com" }]} />);
     expect(container.querySelector('[data-loom-component="profile-card"]')).not.toBeNull();
+  });
+});
+
+describe("DismissBanner — EventNode.trigger kind: key fires a declared event off its own root keydown, no machine required (§ Phase 5d)", () => {
+  it("is focusable — tabIndex={0} is present since the root has a keydown handler", () => {
+    const { getByRole } = render(<DismissBanner>Saved.</DismissBanner>);
+    expect(getByRole("alert").tabIndex).toBe(0);
+  });
+
+  it("fires onDismissed when Escape is pressed", () => {
+    let dismissed = false;
+    const { getByRole } = render(<DismissBanner onDismissed={() => { dismissed = true; }}>Saved.</DismissBanner>);
+    fireEvent.keyDown(getByRole("alert"), { key: "Escape" });
+    expect(dismissed).toBe(true);
+  });
+
+  it("does not fire onDismissed for any other key — proves the emitted guard actually discriminates by key", () => {
+    let dismissed = false;
+    const { getByRole } = render(<DismissBanner onDismissed={() => { dismissed = true; }}>Saved.</DismissBanner>);
+    fireEvent.keyDown(getByRole("alert"), { key: "Enter" });
+    fireEvent.keyDown(getByRole("alert"), { key: "a" });
+    expect(dismissed).toBe(false);
   });
 });

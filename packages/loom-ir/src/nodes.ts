@@ -33,14 +33,20 @@ export interface EventNode extends LoomNodeEnvelope {
    * root element — the same `Trigger` shape a `TransitionNode` uses, so a
    * plain (machine-less) leaf like `button` can declare "`press` fires on
    * click" without needing a whole machine just to react to one
-   * interaction. Only a `kind: "event"` trigger (a named DOM event, the
-   * only kind any current example's machine trigger uses either) is wired
-   * up by either emitter today — `key`/`pointer` stay declarable but inert,
-   * same as before this field existed; real keyboard triggers are
-   * out-of-scope, separate work. Payload is always empty (`{}`) — a
-   * triggered event's own `payloadType` must therefore be `record{}` with
-   * no fields (checked by `checkComposition`); sourcing a real payload
-   * from DOM/component state is a bigger mechanism this doesn't attempt.
+   * interaction. Two kinds are wired up by either emitter today:
+   * `kind: "event"` (a named DOM event) and `kind: "key"` (a `keydown`,
+   * filtered to that one key — `lowerRootHandlers` also adds `tabIndex={0}`/
+   * `tabindex="0"` to the root whenever a `key` trigger is present, since a
+   * keydown handler is inert on an unfocusable element; actually moving
+   * focus there — autofocus-on-open, a focus trap — is separate,
+   * out-of-scope work). `kind: "pointer"` stays declarable but inert, same
+   * as before this field existed. A component may declare at most one
+   * *distinct* keyboard-trigger key across all its events (checked by
+   * `checkComposition`) — both backends can only bind one `keydown` handler
+   * per root element. Payload is always empty (`{}`) — a triggered event's
+   * own `payloadType` must therefore be `record{}` with no fields (checked
+   * by `checkComposition`); sourcing a real payload from DOM/component
+   * state is a bigger mechanism this doesn't attempt.
    */
   trigger?: Trigger;
 }

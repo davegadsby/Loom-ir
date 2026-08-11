@@ -263,6 +263,35 @@ describe("checkComposition", () => {
     expect(() => checkComposition(widget)).toThrow(/trigger but its payloadType is not 'record{}'/);
   });
 
+  it("accepts a declared event with a kind:key trigger", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/dismissed", kind: "event", origin: "own", assertable: false, name: "dismissed", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Escape" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
+  it("throws when two declared events wire a keydown trigger to two different keys — both backends can only bind one keydown handler on the root", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/dismissed", kind: "event", origin: "own", assertable: false, name: "dismissed", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Escape" } },
+        { id: "widget/declarations/confirmed", kind: "event", origin: "own", assertable: false, name: "confirmed", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Enter" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).toThrow(/more than one distinct keyboard trigger key/);
+  });
+
+  it("allows two declared events to share the exact same keydown trigger key (they merge into one handler)", () => {
+    const widget = makeWidget({
+      declarations: [
+        { id: "widget/declarations/dismissed", kind: "event", origin: "own", assertable: false, name: "dismissed", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Escape" } },
+        { id: "widget/declarations/cancelled", kind: "event", origin: "own", assertable: false, name: "cancelled", payloadType: { kind: "record", fields: {} }, trigger: { kind: "key", key: "Escape" } },
+      ],
+    });
+    expect(() => checkComposition(widget)).not.toThrow();
+  });
+
   const username: FieldNode = {
     id: "widget/declarations/username",
     kind: "field",

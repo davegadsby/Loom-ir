@@ -1,5 +1,5 @@
 import type { ComponentNode, EmittedFile, FieldNode, Handler, PropNode, ResourceNode, RenderNode } from "loom-ir";
-import { lower, lowerComposition, lowerRootHandlers } from "loom-ir";
+import { lower, lowerComposition, lowerRootHandlers, hasKeydownHandler } from "loom-ir";
 import type { Expr, LoomType } from "loom-expr";
 import { partClassName } from "loom-emit-styles";
 import {
@@ -119,10 +119,19 @@ function printEffect(effect: Handler["effects"][number], fieldsByName: ReadonlyM
   return printEmitEffect(effect, fieldsByName);
 }
 
+/** React's synthetic event props are camelCase; a multi-word native DOM event name (only `"keydown"` so far) doesn't camelCase by capitalizing alone. */
+function reactEventPropName(domEventName: string): string {
+  return domEventName === "keydown" ? "keyDown" : domEventName;
+}
+
 function printHandlers(handlers: readonly Handler[], fieldsByName: ReadonlyMap<string, FieldNode>): string[] {
   return handlers.map((h) => {
     const calls = h.effects.map((e) => printEffect(e, fieldsByName));
-    return `on${capitalize(h.on)}={() => { ${calls.join(" ")} }}`;
+    const propName = `on${capitalize(reactEventPropName(h.on))}`;
+    if (h.key !== undefined) {
+      return `${propName}={(e) => { if (e.key === ${JSON.stringify(h.key)}) { ${calls.join(" ")} } }}`;
+    }
+    return `${propName}={() => { ${calls.join(" ")} }}`;
   });
 }
 
@@ -398,6 +407,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
 
   const isButtonPattern = pattern?.pattern === "button";
   const rootTag = isButtonPattern ? "button" : "div";
+  const rootHandlers = lowerRootHandlers(component);
 
   lines.push(`  return (`);
   lines.push(`    <${rootTag}`);
@@ -410,7 +420,10 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(`      role=${JSON.stringify(pattern.pattern)}`);
   }
   if (disabledProp) lines.push(isButtonPattern ? `      disabled={disabled}` : `      aria-disabled={disabled}`);
-  for (const attr of printHandlers(lowerRootHandlers(component), fieldsByName)) lines.push(`      ${attr}`);
+  // A keydown handler is inert on an element that can never receive focus — `tabIndex={0}`
+  // is what makes a keyboard trigger honestly operable, not just declared.
+  if (hasKeydownHandler(rootHandlers)) lines.push(`      tabIndex={0}`);
+  for (const attr of printHandlers(rootHandlers, fieldsByName)) lines.push(`      ${attr}`);
   lines.push(`    >`);
   if (rootUses) {
     // `visibleWhen`'s multi-line/parenthesized wrap is special-cased here,
