@@ -142,7 +142,7 @@ A disclosure can't be expanded while disabled.
 ### click-expands-a-collapsed-panel
 
 ```yaml
-kind: path
+kind: scenario
 from: collapsed
 events:
   - { kind: event, name: click }

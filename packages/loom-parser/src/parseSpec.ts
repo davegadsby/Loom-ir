@@ -3,7 +3,7 @@ import type matterFn from "gray-matter";
 import { validateFrontmatter, validateNodeBlock } from "loom-schema";
 import {
   computeNodeId,
-  checkPath,
+  checkScenario,
   checkComposition,
   type A11yNode,
   type ClaimNode,
@@ -147,7 +147,7 @@ export function parseSpec(source: string, options: ParseSpecOptions = {}): Compo
   }
 
   for (const claim of component.claims) {
-    if (claim.kind === "path") checkPath(claim, component.transitions);
+    if (claim.kind === "scenario") checkScenario(claim, component.transitions);
   }
 
   checkComposition(component);
@@ -292,10 +292,10 @@ function buildClaimNode(componentSlug: string, block: RawNodeBlock): ClaimNode {
         predicate: parseExpr(yaml.predicate as string),
       };
     }
-    case "path":
+    case "scenario":
       return {
         ...envelope,
-        kind: "path",
+        kind: "scenario",
         verify: asVerify(yaml.verify, "interaction"),
         from: yaml.from as string,
         events: yaml.events as Trigger[],

@@ -17,7 +17,7 @@
     { "$ref": "#/$defs/rule" },
     { "$ref": "#/$defs/invariant" },
     { "$ref": "#/$defs/property" },
-    { "$ref": "#/$defs/path" },
+    { "$ref": "#/$defs/scenario" },
     { "$ref": "#/$defs/unexpressible" },
     { "$ref": "#/$defs/patternConformance" },
     { "$ref": "#/$defs/delta" },
@@ -188,12 +188,12 @@
         "verify": { "type": "string", "enum": ["unit", "interaction", "a11y", "visual"] }
       }
     },
-    "path": {
+    "scenario": {
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "from", "events", "to"],
       "properties": {
-        "kind": { "const": "path" },
+        "kind": { "const": "scenario" },
         "from": { "type": "string" },
         "events": { "type": "array", "items": { "$ref": "#/$defs/trigger" } },
         "to": { "type": "string" },

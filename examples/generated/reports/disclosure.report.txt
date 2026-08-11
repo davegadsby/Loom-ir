@@ -15,7 +15,7 @@ not-applicable guard                disclosure/machine/can-toggle
 not-applicable rule                 disclosure/machine/disabled-locks-collapsed
 confirmed      property             interactive-base/claims/disabled-not-focusable
 confirmed      invariant            disclosure/claims/expanding-requires-not-disabled
-confirmed      path                 disclosure/claims/click-expands-a-collapsed-panel
+confirmed      scenario             disclosure/claims/click-expands-a-collapsed-panel
 unverified     property             disclosure/claims/transitions-stay-within-declared-states
 unverified     pattern-conformance  disclosure/a11y/disclosure-pattern
 not-applicable aria-relation        disclosure/a11y/panel-relation

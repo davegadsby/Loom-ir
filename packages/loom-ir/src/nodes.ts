@@ -197,9 +197,9 @@ export interface PropertyNode extends LoomNodeEnvelope {
   predicate: Expr;
 }
 
-/** A behavioural scenario, reframed as a path assertion over the machine (§5.2). */
-export interface PathNode extends LoomNodeEnvelope {
-  kind: "path";
+/** A behavioural scenario: an assertion that a specific event sequence, fired from one declared state, lands in another (§5.2). */
+export interface ScenarioNode extends LoomNodeEnvelope {
+  kind: "scenario";
   from: string;
   events: Trigger[];
   to: string;
@@ -211,7 +211,7 @@ export interface UnexpressibleNode extends LoomNodeEnvelope {
   claim: string;
 }
 
-export type ClaimNode = InvariantNode | PropertyNode | PathNode | UnexpressibleNode;
+export type ClaimNode = InvariantNode | PropertyNode | ScenarioNode | UnexpressibleNode;
 
 // ---------------------------------------------------------------------------
 // A11y

@@ -68,7 +68,7 @@ kind: unexpressible
 
 That pressing any key other than Escape leaves the banner exactly as it
 was is a real, checkable property in principle, but the claim language
-quantifies over `states`/`transitions` (`PathNode`/`PropertyNode`) or
+quantifies over `states`/`transitions` (`ScenarioNode`/`PropertyNode`) or
 the value graph (`derived`) — neither of which a root-level DOM keydown
 guard is expressed through. `examples/tests/render.test.tsx` proves this
 behaviorally instead (a non-Escape keydown does not fire `dismissed`; an

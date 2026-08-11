@@ -79,7 +79,7 @@ guard: "not disabled"
 ### click-checks-an-unchecked-box
 
 ```yaml
-kind: path
+kind: scenario
 from: unchecked
 events:
   - { kind: event, name: click }
