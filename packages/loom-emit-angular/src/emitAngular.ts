@@ -349,11 +349,17 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   // Static string values are bound as single-quoted TS literals inside the
   // double-quoted HTML attribute value — reusing JSON.stringify (double
   // quotes) here would collide with the surrounding template-string quoting.
+  const isButtonPattern = pattern?.pattern === "button";
+  const rootTag = isButtonPattern ? "button" : "div";
   const attrs: string[] = [`[attr.data-loom-component]="'${component.name}'"`];
   if (styledParts.has("root")) attrs.push(`class="${partClassName(component.name, "root")}"`);
   if (hasMachine) attrs.push(`[attr.data-state]="state"`);
-  if (pattern) attrs.push(`[attr.role]="'${pattern.pattern}'"`);
-  if (disabledProp) attrs.push(`[attr.aria-disabled]="disabled"`);
+  if (isButtonPattern) {
+    attrs.push(`type="button"`);
+  } else if (pattern) {
+    attrs.push(`[attr.role]="'${pattern.pattern}'"`);
+  }
+  if (disabledProp) attrs.push(isButtonPattern ? `[disabled]="disabled"` : `[attr.aria-disabled]="disabled"`);
   attrs.push(...printHandlers(lowerRootHandlers(component)));
   // Angular projects by CSS selector against the light DOM, not by prop —
   // a named slot becomes `<ng-content select="[slot=name]">`, matching
@@ -366,7 +372,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   // but not for React).
   const eachIdents = eachTemplateIdents(component.composition);
   const templateBody = rootUses ? printInline(lowerComposition(rootUses, component), eachIdents) : printRenderNodes(lower(component));
-  const template = `<div ${attrs.join(" ")}>${templateBody}</div>`;
+  const template = `<${rootTag} ${attrs.join(" ")}>${templateBody}</${rootTag}>`;
 
   const importsArr = [...referencedComponents.map((c) => `${pascalCase(c.name)}Component`), ...(usesNgIf ? ["NgIf"] : [])];
 

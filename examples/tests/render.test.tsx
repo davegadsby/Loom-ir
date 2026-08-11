@@ -89,31 +89,33 @@ describe("LoginDialog — native fields and live validation", () => {
 
   it("computes Login's disabled prop across BOTH fields — the cross-component computed value", () => {
     const { container } = render(<LoginDialog />);
-    const login = () => container.querySelectorAll('[data-loom-component="button"]')[0]!;
+    // Button's root is now a real <button> (§ Phase 5b) — its own `disabled` prop binds the
+    // native `disabled` DOM property, not `aria-disabled`.
+    const login = () => container.querySelectorAll<HTMLButtonElement>('[data-loom-component="button"]')[0]!;
 
-    expect(login().getAttribute("aria-disabled")).toBe("true");
+    expect(login().disabled).toBe(true);
 
     fireEvent.change(usernameInput(container), { target: { value: "a@b.co" } });
-    expect(login().getAttribute("aria-disabled")).toBe("true"); // password still invalid
+    expect(login().disabled).toBe(true); // password still invalid
 
     fireEvent.change(passwordInput(container), { target: { value: "longenough" } });
-    expect(login().getAttribute("aria-disabled")).toBe("false"); // both valid
+    expect(login().disabled).toBe(false); // both valid
   });
 });
 
 describe("SignupDialog — an authored derived value, cross-referenced from a composed prop", () => {
   const emailInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[name="email"]')!;
-  const submitButton = (c: HTMLElement) => c.querySelectorAll('[data-loom-component="button"]')[0]!;
+  const submitButton = (c: HTMLElement) => c.querySelectorAll<HTMLButtonElement>('[data-loom-component="button"]')[0]!;
 
   it("computes the named `invalid` derived value from the field's own validity, disabling Submit through it", () => {
     const { container } = render(<SignupDialog />);
-    expect(submitButton(container).getAttribute("aria-disabled")).toBe("true");
+    expect(submitButton(container).disabled).toBe(true);
 
     fireEvent.change(emailInput(container), { target: { value: "not-an-email" } });
-    expect(submitButton(container).getAttribute("aria-disabled")).toBe("true");
+    expect(submitButton(container).disabled).toBe(true);
 
     fireEvent.change(emailInput(container), { target: { value: "a@b.co" } });
-    expect(submitButton(container).getAttribute("aria-disabled")).toBe("false");
+    expect(submitButton(container).disabled).toBe(false);
   });
 
   it("shows and clears the field error live, same as LoginDialog's own fields", () => {
@@ -215,5 +217,28 @@ describe("real triggers — EventNode.trigger fires a declared event off its own
     fireEvent.click(container.querySelectorAll('[data-loom-component="button"]')[0]!);
 
     expect(seen).toEqual([{ email: "a@b.co" }]);
+  });
+});
+
+describe("Button — a real <button> tag for the button a11y pattern (§ Phase 5b)", () => {
+  it("is a real HTMLButtonElement, not a div with role=\"button\"", () => {
+    const { container } = render(<Button>Go</Button>);
+    expect(container.querySelector("button")).not.toBeNull();
+    expect(container.querySelector("div[role='button']")).toBeNull();
+  });
+
+  it("a disabled button does not fire onPress when clicked — the browser refuses to dispatch click at all, no manual guard needed", () => {
+    let pressed = false;
+    const { getByRole } = render(<Button disabled onPress={() => { pressed = true; }}>Go</Button>);
+    fireEvent.click(getByRole("button"));
+    expect(pressed).toBe(false);
+  });
+
+  it("re-enabling clears the native disabled attribute and restores click behavior", () => {
+    let pressed = false;
+    const { getByRole, rerender } = render(<Button disabled onPress={() => { pressed = true; }}>Go</Button>);
+    rerender(<Button onPress={() => { pressed = true; }}>Go</Button>);
+    fireEvent.click(getByRole("button"));
+    expect(pressed).toBe(true);
   });
 });

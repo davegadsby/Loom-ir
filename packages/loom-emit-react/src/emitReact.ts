@@ -235,10 +235,19 @@ function printInline(
  * instantiated at runtime as a loom-expr `LoomMachine` — the same
  * interpreter loom-emit-tests reuses for generated tests, now wrapped in a
  * typed class instead of an untyped literal — rather than transpiling each
- * guard into bespoke JS. Only a generic `click` interaction is wired up for
- * now (key/pointer triggers are a backend TODO); `MethodNode`s have no
- * React rendering strategy yet and are skipped rather than failing the
- * whole emission (§14 step 5's "skip, don't throw" contract). If any `part`
+ * guard into bespoke JS. Root-level interaction wiring (`lowerRootHandlers`)
+ * only ever produces a `{kind:"event"}`-triggered handler today (key/pointer
+ * triggers stay declarable but inert); `MethodNode`s have no React rendering
+ * strategy yet and are skipped rather than failing the whole emission
+ * (§14 step 5's "skip, don't throw" contract). The root element is a real
+ * `<button type="button">` when the component's `pattern-conformance` names
+ * the `"button"` pattern — `disabled` becomes the native attribute instead
+ * of `aria-disabled` (the browser refuses to fire `click` on a disabled
+ * `<button>` at all, which `aria-disabled` alone never did — nothing
+ * guarded a click handler against a disabled prop before this), and Enter/
+ * Space activation comes free from the browser instead of needing a
+ * hand-wired keyboard trigger. Every other pattern still renders `<div
+ * role="...">`. If any `part`
  * (root or a slot) carries a `TokenRefNode`/`LayoutIntentNode`, its DOM node
  * gets a `className` from `loom-emit-styles`' `partClassName` — the same
  * naming function the CSS backend uses to generate the matching selector —
@@ -378,13 +387,20 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(``);
   }
 
+  const isButtonPattern = pattern?.pattern === "button";
+  const rootTag = isButtonPattern ? "button" : "div";
+
   lines.push(`  return (`);
-  lines.push(`    <div`);
+  lines.push(`    <${rootTag}`);
   lines.push(`      data-loom-component=${JSON.stringify(component.name)}`);
   if (styledParts.has("root")) lines.push(`      className=${JSON.stringify(partClassName(component.name, "root"))}`);
   if (component.states.length > 0) lines.push(`      data-state={state}`);
-  if (pattern) lines.push(`      role=${JSON.stringify(pattern.pattern)}`);
-  if (disabledProp) lines.push(`      aria-disabled={disabled}`);
+  if (isButtonPattern) {
+    lines.push(`      type="button"`);
+  } else if (pattern) {
+    lines.push(`      role=${JSON.stringify(pattern.pattern)}`);
+  }
+  if (disabledProp) lines.push(isButtonPattern ? `      disabled={disabled}` : `      aria-disabled={disabled}`);
   for (const attr of printHandlers(lowerRootHandlers(component), fieldsByName)) lines.push(`      ${attr}`);
   lines.push(`    >`);
   if (rootUses) {
@@ -404,7 +420,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   } else {
     lines.push(...printRenderNodes(lower(component), component.name, styledParts));
   }
-  lines.push(`    </div>`);
+  lines.push(`    </${rootTag}>`);
   lines.push(`  );`);
   lines.push(`}`, ``);
 

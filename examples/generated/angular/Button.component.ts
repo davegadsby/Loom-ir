@@ -4,7 +4,7 @@ import { Component, EventEmitter, Input, Output } from "@angular/core";
 @Component({
   selector: "loom-button",
   standalone: true,
-  template: `<div [attr.data-loom-component]="'button'" class="loom-button" [attr.role]="'button'" [attr.aria-disabled]="disabled" (click)="press.emit({  })"><ng-content></ng-content></div>`,
+  template: `<button [attr.data-loom-component]="'button'" class="loom-button" type="button" [disabled]="disabled" (click)="press.emit({  })"><ng-content></ng-content></button>`,
   styleUrls: ["./Button.css"],
 })
 export class ButtonComponent {
