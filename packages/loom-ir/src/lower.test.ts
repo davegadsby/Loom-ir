@@ -261,3 +261,69 @@ describe("lowerComposition — login-dialog shape (fields, computed prop, multi-
     ]);
   });
 });
+
+describe("lowerComposition — each (iteration)", () => {
+  const list = makeChildComponent("list", {
+    declarations: [{ id: "list/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" }],
+  });
+  const listItem = makeChildComponent("list-item", {
+    declarations: [
+      { id: "list-item/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" } },
+    ],
+  });
+  const itemTemplate: UsesNode = {
+    id: "task-list/composition/item-template",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "item-template",
+    component: "list-item",
+    resolvedComponent: listItem,
+    props: { label: { expr: { type: "member", target: { type: "ref", name: "task" }, property: "label" } } },
+  };
+  const listUses: UsesNode = {
+    id: "task-list/composition/list-instance",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "list-instance",
+    component: "list",
+    resolvedComponent: list,
+    root: true,
+    slotContent: { default: { each: { over: "tasks", as: "task", use: "item-template", key: "id" } } },
+  };
+  const taskList = makeChildComponent("task-list", { composition: [listUses, itemTemplate] });
+
+  it("lowers an each slotContent to a single 'each' render node filling the slot", () => {
+    const tree = lowerComposition(listUses, taskList);
+    if (tree.kind !== "instance") throw new Error("unreachable");
+    const fill = tree.fills.default!;
+    expect(fill).toHaveLength(1);
+    expect(fill[0]).toMatchObject({ kind: "each", ident: "task", over: { type: "ref", name: "tasks" } });
+  });
+
+  it("sets 'key' to a member expr over the bound ident, from each.key", () => {
+    const tree = lowerComposition(listUses, taskList);
+    if (tree.kind !== "instance") throw new Error("unreachable");
+    const each = tree.fills.default![0] as Extract<RenderNode, { kind: "each" }>;
+    expect(each.key).toEqual({ type: "member", target: { type: "ref", name: "task" }, property: "id" });
+  });
+
+  it("leaves 'key' undefined when each.key is omitted", () => {
+    const noKey: UsesNode = { ...listUses, slotContent: { default: { each: { over: "tasks", as: "task", use: "item-template" } } } };
+    const tree = lowerComposition(noKey, { ...taskList, composition: [noKey, itemTemplate] });
+    if (tree.kind !== "instance") throw new Error("unreachable");
+    const each = tree.fills.default![0] as Extract<RenderNode, { kind: "each" }>;
+    expect(each.key).toBeUndefined();
+  });
+
+  it("lowers each.use's node once, as the each's own body — its computed prop keeps the bound-ident-referencing expr untouched", () => {
+    const tree = lowerComposition(listUses, taskList);
+    if (tree.kind !== "instance") throw new Error("unreachable");
+    const each = tree.fills.default![0] as Extract<RenderNode, { kind: "each" }>;
+    expect(each.body).toHaveLength(1);
+    expect(each.body[0]).toMatchObject({ kind: "instance", name: "item-template" });
+    if (each.body[0]!.kind !== "instance") throw new Error("unreachable");
+    expect(each.body[0]!.props.label).toEqual({ type: "member", target: { type: "ref", name: "task" }, property: "label" });
+  });
+});

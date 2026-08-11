@@ -122,3 +122,35 @@ All four are checked in CI (`.github/workflows/ci.yml`).
   text. Give anything you intend to reference from an `{expr}`/`validate`/
   `guard`/etc. a single-word name for now. See `DerivedNode`'s doc comment
   in `packages/loom-ir/src/nodes.ts` for where this was first hit directly.
+- A `PropertyNode` claim's domain *surface grammar* (`parseDomainClause` in
+  `packages/loom-expr/src/parser.ts`) only recognizes `bool`/`int`/`float`/
+  `string` as a base `type` domain — `record{...}`/`enum<...>`/`option<...>`
+  cannot be written as (or nested inside `list<...>`/`where(...)`, etc.) a
+  claim's domain, even though `Domain`'s `{kind:"type", type: LoomType}`
+  variant and `domainToArbitrary` both already support an arbitrary
+  `LoomType` generically. A property claim that needs to sample a
+  record-shaped free input has to use a structurally-simpler stand-in
+  domain instead (see `examples/specs/task-list.md`'s claim for a worked
+  example, and why that's honest rather than a shortcut).
+- `emitAngular` prints every `PropNode` unconditionally as `@Input() name:
+  T = <defaultValue ?? null>;` — for a non-optional `T` (e.g. `string`,
+  `record{...}`, an `enum`) with no declared `default`, that's `= null`,
+  which fails Angular's TS compile under `strictNullChecks`. Every example
+  spec before `list-item.md` happened to give every prop a default, so
+  nothing exercised this until a prop was deliberately left required.
+  Give a defaultless non-bool prop a `default` for now (`list-item.md`'s
+  `label` does, with a comment explaining why) — fixing the emitter means
+  first picking a real policy (definite-assignment `!`, a nullable type, a
+  required-input diagnostic), not something one example spec should decide.
+- A primitive component has no way to render one of its own prop's values
+  as displayed content — only a *composed child's* `{expr}` prop can
+  reference a value computed at render time; a primitive's own `lower()`
+  path only ever produces `slot` render nodes from its own declared
+  `SlotNode`s (`packages/loom-ir/src/lower.ts`). `list-item.md`'s `label`/
+  `done` props are real, typed, and correctly threaded end to end (proven
+  by unit tests evaluating the generated `{expr}` code directly), but
+  never show up in `ListItem`'s own rendered DOM — there's currently no
+  render-tree construct for "show my own prop here." A real gap, not
+  specific to `each`/iteration; closing it needs a new `RenderNode`
+  variant (something like `{ kind: "text"; value: Expr }` sourced from a
+  component's own prop, not a literal), which is separate scope.

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitReact } from "./emitReact.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture, makeEachFixture } from "./fixtures.js";
 
 describe("emitReact", () => {
   it("emits one PascalCase-named file per component", () => {
@@ -212,5 +212,56 @@ describe("emitReact — authored derived values", () => {
     expect(emailValid).toBe(false);
     expect(invalid).toBe(true);
     expect(disabled).toBe(true);
+  });
+});
+
+describe("emitReact — each (iteration)", () => {
+  it("prints a slot fill as tasks.map((task) => (...)), not a fixed-arity render", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain("<List>{tasks.map((task) => (<ListItem");
+  });
+
+  it("prints a React key from each.key, as the first attribute on the templated instance", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain("<ListItem key={task.id}");
+  });
+
+  it("a bool-typed templated prop keeps the historical === true coercion", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain(
+      'done={evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"done"}, { ...__env, task }) === true}'
+    );
+  });
+
+  it("a non-bool templated prop casts through loomTypeToTs instead of the === true coercion — the first non-bool computed prop this emitter has ever printed", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain(
+      '(evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"label"}, { ...__env, task }) as string)'
+    );
+  });
+
+  it("merges the bound ident into __env for the templated instance's {expr} props, without touching __env's own construction", () => {
+    const [file] = emitReact(makeEachFixture());
+    expect(file!.contents).toContain("const __env: any = { tasks };");
+    expect(file!.contents).toContain("{ ...__env, task }");
+  });
+
+  it("the emitted map callback actually evaluates each item's props correctly (proves the emission is sound)", () => {
+    const labelExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "label" };
+    const doneExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "done" };
+    const tasks = [
+      { id: "a", label: "Buy milk", done: false },
+      { id: "b", label: "Walk dog", done: true },
+    ];
+    const __env = { tasks };
+    const rendered = tasks.map((task) => ({
+      key: task.id,
+      label: evaluate(labelExpr, { ...__env, task }) as string,
+      done: evaluate(doneExpr, { ...__env, task }) === true,
+    }));
+    expect(rendered).toEqual([
+      { key: "a", label: "Buy milk", done: false },
+      { key: "b", label: "Walk dog", done: true },
+    ]);
   });
 });

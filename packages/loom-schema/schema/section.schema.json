@@ -326,6 +326,24 @@
                 "description": "Ordered list of this component's own declared FieldNode names, rendered inline as native <input> elements in this slot position."
               }
             }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["each"],
+            "properties": {
+              "each": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["over", "as", "use"],
+                "properties": {
+                  "over": { "type": "string", "description": "Name of a declared prop on this component, of type list<T> — the collection to iterate." },
+                  "as": { "type": "string", "description": "Bound name for each item, in scope inside `use`'s own props/slotContent { expr } values." },
+                  "use": { "type": "string", "description": "Name of a sibling `uses` node in this component's Composition section, instantiated once per item." },
+                  "key": { "type": "string", "description": "Name of a field of T (T must be a record) — used as React's key / Angular's trackBy." }
+                }
+              }
+            }
           }
         ]
       }

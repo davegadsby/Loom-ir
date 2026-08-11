@@ -16,7 +16,18 @@ const generatedDir = join(examplesDir, "generated");
 const tokensPath = join(examplesDir, "design-tokens.json");
 
 // Real standalone components only, matching examples/regenerate.ts.
-const components = ["checkbox", "disclosure", "button", "dialog", "confirmation-dialog", "login-dialog", "signup-dialog"];
+const components = [
+  "checkbox",
+  "disclosure",
+  "button",
+  "dialog",
+  "confirmation-dialog",
+  "login-dialog",
+  "signup-dialog",
+  "list",
+  "list-item",
+  "task-list",
+];
 
 function assertMatchesCommitted(dir: string, files: readonly EmittedFile[]): void {
   for (const file of files) {

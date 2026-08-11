@@ -138,6 +138,17 @@ function lowerUsesInstance(
       fills[slot.name] = [
         { kind: "fragment", children: content.uses.map((n) => lowerUsesInstance(byName.get(n)!, byName, fieldsByName)) },
       ];
+    } else if ("each" in content) {
+      const { over, as, use, key } = content.each;
+      fills[slot.name] = [
+        {
+          kind: "each",
+          ident: as,
+          over: { type: "ref", name: over },
+          key: key ? { type: "member", target: { type: "ref", name: as }, property: key } : undefined,
+          body: [lowerUsesInstance(byName.get(use)!, byName, fieldsByName)],
+        },
+      ];
     } else {
       fills[slot.name] = [{ kind: "fragment", children: content.fields.map((n) => lowerField(fieldsByName.get(n)!)) }];
     }

@@ -19,6 +19,7 @@ import { Button } from "../generated/react/Button";
 import { LoginDialog } from "../generated/react/LoginDialog";
 import { ConfirmationDialog } from "../generated/react/ConfirmationDialog";
 import { SignupDialog } from "../generated/react/SignupDialog";
+import { TaskList } from "../generated/react/TaskList";
 
 afterEach(cleanup);
 
@@ -125,6 +126,49 @@ describe("SignupDialog — an authored derived value, cross-referenced from a co
     expect(error()?.textContent).toBe("Enter a valid email address.");
     fireEvent.change(input, { target: { value: "a@b.co" } });
     expect(error()).toBeNull();
+  });
+});
+
+describe("TaskList — each: one rendered instance per element of a list-typed prop", () => {
+  const items = (c: HTMLElement) => c.querySelectorAll('[data-loom-component="list-item"]');
+
+  it("renders zero list-item instances for the default (empty) tasks", () => {
+    const { container } = render(<TaskList />);
+    expect(items(container)).toHaveLength(0);
+  });
+
+  it("renders exactly one list-item instance per element of tasks — proves .map() genuinely iterates, not a fixed-arity render", () => {
+    const tasks = [
+      { id: "a", label: "Buy milk", done: false },
+      { id: "b", label: "Walk dog", done: true },
+      { id: "c", label: "Write report", done: false },
+    ];
+    const { container } = render(<TaskList tasks={tasks} />);
+    expect(items(container)).toHaveLength(3);
+  });
+
+  it("re-renders to match a changed tasks array, in either direction — confirms this is live iteration, not something computed once", () => {
+    const { container, rerender } = render(<TaskList tasks={[{ id: "a", label: "One", done: false }]} />);
+    expect(items(container)).toHaveLength(1);
+
+    rerender(
+      <TaskList
+        tasks={[
+          { id: "a", label: "One", done: false },
+          { id: "b", label: "Two", done: false },
+          { id: "c", label: "Three", done: true },
+        ]}
+      />
+    );
+    expect(items(container)).toHaveLength(3);
+
+    rerender(<TaskList tasks={[]} />);
+    expect(items(container)).toHaveLength(0);
+  });
+
+  it("each rendered list-item conforms to the WAI-ARIA listitem pattern, same as any other list-item instance", () => {
+    const { container } = render(<TaskList tasks={[{ id: "a", label: "One", done: false }]} />);
+    expect(items(container)[0]!.getAttribute("role")).toBe("listitem");
   });
 });
 

@@ -28,6 +28,7 @@ export type {
   VisualConformanceNode,
   StyleNode,
   UsesNode,
+  EachSlotContent,
   CompositionNode,
   PropValue,
   OnWireTarget,

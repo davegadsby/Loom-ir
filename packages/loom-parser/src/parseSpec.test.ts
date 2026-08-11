@@ -584,6 +584,97 @@ on:
       press: [{ event: "login", payload: { username: "username" } }, { event: "closed" }],
     });
   });
+
+  it("parses slotContent.each end to end from real YAML — no new grammar needed, just a new slotContent shape riding the existing raw pass-through", () => {
+    const listSpec = `---
+name: list
+kind: primitive
+---
+
+## Declarations
+
+### default
+
+\`\`\`yaml
+kind: slot
+\`\`\`
+`;
+    const listItemSpec = `---
+name: list-item
+kind: primitive
+---
+
+## Declarations
+
+### label
+
+\`\`\`yaml
+kind: prop
+type: string
+\`\`\`
+`;
+    const taskListSpec = `---
+name: task-list
+kind: composite
+---
+
+## Declarations
+
+### tasks
+
+\`\`\`yaml
+kind: prop
+type: "list<record{id: string, label: string}>"
+default: []
+\`\`\`
+
+## Composition
+
+### list-instance
+
+\`\`\`yaml
+kind: uses
+component: list
+root: true
+slotContent:
+  default:
+    each:
+      over: tasks
+      as: task
+      use: item-template
+      key: id
+\`\`\`
+
+### item-template
+
+\`\`\`yaml
+kind: uses
+component: list-item
+props:
+  label:
+    expr: "task.label"
+\`\`\`
+`;
+    const list = parseSpec(listSpec);
+    const listItem = parseSpec(listItemSpec);
+    const taskList = parseSpec(taskListSpec, {
+      resolveComponent: (ref) => {
+        if (ref === "list") return list;
+        if (ref === "list-item") return listItem;
+        throw new Error(`unknown component '${ref}'`);
+      },
+    });
+
+    const listInstance = taskList.composition.find((n) => n.name === "list-instance")!;
+    expect(listInstance.slotContent).toEqual({
+      default: { each: { over: "tasks", as: "task", use: "item-template", key: "id" } },
+    });
+
+    const itemTemplate = taskList.composition.find((n) => n.name === "item-template")!;
+    expect(itemTemplate.props).toEqual({
+      label: { expr: { type: "member", target: { type: "ref", name: "task" }, property: "label" } },
+    });
+  });
 });
 
 describe("parseSpec — error handling", () => {

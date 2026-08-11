@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { LoomType } from "loom-expr";
 import { checkComposition, CompositionCheckError } from "./composition.js";
 import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode, DerivedNode } from "./nodes.js";
 
@@ -500,6 +501,147 @@ describe("checkComposition", () => {
       };
       const widget = makeWidget({ declarations: [a, b] });
       expect(() => checkComposition(widget)).toThrow(/invalid expression/);
+    });
+  });
+
+  describe("each", () => {
+    const itemType: LoomType = { kind: "record", fields: { id: { kind: "string" }, label: { kind: "string" } } };
+    const itemsProp: PropNode = {
+      id: "widget/declarations/items",
+      kind: "prop",
+      origin: "own",
+      assertable: false,
+      name: "items",
+      valueType: { kind: "list", of: itemType },
+      defaultValue: [],
+    };
+    const itemChild = makeChildComponent({
+      id: "item",
+      name: "item",
+      declarations: [
+        { id: "item/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" } },
+        { id: "item/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+      ],
+    });
+    function makeItemUses(overrides: Partial<UsesNode>): UsesNode {
+      return {
+        id: "widget/composition/item-template",
+        kind: "uses",
+        origin: "own",
+        assertable: false,
+        name: "item-template",
+        component: "item",
+        resolvedComponent: itemChild,
+        ...overrides,
+      };
+    }
+    const itemLabelExpr = { type: "member", target: { type: "ref", name: "item" }, property: "label" } as const;
+
+    it("accepts a valid each: iterates a declared list prop, instantiating its template with the bound ident in scope", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template", key: "id" } } } }),
+          makeItemUses({ props: { label: { expr: itemLabelExpr } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("throws when each.over is not a declared prop", () => {
+      const widget = makeWidget({
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "missing", as: "item", use: "item-template" } } } }),
+          makeItemUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/each.over 'missing' is not a declared prop/);
+    });
+
+    it("throws when each.over is not a list-typed prop", () => {
+      const notAList: PropNode = { ...itemsProp, name: "count", valueType: { kind: "int" }, defaultValue: 0 };
+      const widget = makeWidget({
+        declarations: [notAList],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "count", as: "item", use: "item-template" } } } }),
+          makeItemUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/must be a list-typed prop/);
+    });
+
+    it("throws when each.use references an unknown composition node (caught by the same structural 'unknown composition node' check 'uses' gets)", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "missing" } } } })],
+      });
+      expect(() => checkComposition(widget)).toThrow(/references unknown composition node 'missing'/);
+    });
+
+    it("throws when each.key is not a field of the item's record type", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template", key: "missing" } } } }),
+          makeItemUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/each.key 'missing' is not a field/);
+    });
+
+    it("claims each.use's node the same way a plain 'uses' entry does — claimed twice throws, unclaimed (orphaned) throws", () => {
+      const claimedTwice = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: { default: { each: { over: "items", as: "item", use: "item-template" } }, other: { uses: ["item-template"] } },
+          }),
+          makeItemUses({}),
+        ],
+      });
+      expect(() => checkComposition(claimedTwice)).toThrow(/claimed by more than one parent/);
+
+      const orphaned = makeWidget({
+        declarations: [itemsProp],
+        composition: [makeUses({ root: true }), makeItemUses({})],
+      });
+      expect(() => checkComposition(orphaned)).toThrow(/is orphaned/);
+    });
+
+    it("lets the template node's {expr} props reference the bound ident, typed as the list's element type", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template" } } } }),
+          makeItemUses({ props: { label: { expr: itemLabelExpr } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("rejects a template {expr} prop whose type doesn't match, same as any other computed prop", () => {
+      const wrongType = { type: "literal", valueType: { kind: "bool" }, value: true } as const;
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template" } } } }),
+          makeItemUses({ props: { label: { expr: wrongType } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/computed expression has type 'bool', expected 'string'/);
+    });
+
+    it("does NOT let the bound ident leak into a node that isn't the each's own template — e.g. one nested a level deeper, inside the template's own slot", () => {
+      const widget = makeWidget({
+        declarations: [itemsProp],
+        composition: [
+          makeUses({ root: true, slotContent: { default: { each: { over: "items", as: "item", use: "item-template" } } } }),
+          makeItemUses({ slotContent: { default: { uses: ["unrelated"] } } }),
+          makeBoolUses({ name: "unrelated", props: { disabled: { expr: itemLabelExpr } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/invalid computed expression/);
     });
   });
 });

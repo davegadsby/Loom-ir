@@ -1,6 +1,6 @@
 import type { ComponentNode, EmittedFile, FieldNode, Handler, PropNode, RenderNode } from "loom-ir";
 import { lower, lowerComposition } from "loom-ir";
-import type { Expr } from "loom-expr";
+import type { Expr, LoomType } from "loom-expr";
 import { partClassName } from "loom-emit-styles";
 import {
   capitalize,
@@ -62,9 +62,33 @@ function printRenderNodes(nodes: readonly RenderNode[], componentSlug: string, s
   return out;
 }
 
-/** A literal prop prints its raw value directly; anything else is a computed `{expr}` prop, live-evaluated against `__env`. */
-function printPropExpr(expr: Expr): string {
-  return expr.type === "literal" ? JSON.stringify(expr.value) : `evaluate(${JSON.stringify(expr)}, __env) === true`;
+/**
+ * `over`/`key` on an `each` node are always a plain `ref`/`member` chain by
+ * construction (`lower.ts` only ever builds them that way) — already-scoped
+ * JS values (a destructured prop, an `each`'s own callback parameter), never
+ * something needing a runtime `evaluate()` call.
+ */
+function printBareRef(expr: Expr): string {
+  if (expr.type === "ref") return expr.name;
+  if (expr.type === "member") return `${printBareRef(expr.target)}.${expr.property}`;
+  throw new Error(`printBareRef: unsupported expr type '${expr.type}'`);
+}
+
+/**
+ * A literal prop prints its raw value directly; anything else is a computed
+ * `{expr}` prop, live-evaluated against `__env` — extended with any `each`
+ * idents currently in scope (`boundIdents`), so a template instance nested
+ * inside `tasks.map((task) => ...)` can reference `task` from its own
+ * `{expr}` props. Only a `bool`-typed prop gets the historical `=== true`
+ * coercion (every prop this ever ran against before `each` was bool-typed,
+ * so this keeps that output byte-identical); anything else casts through
+ * `loomTypeToTs` instead, since `evaluate()` only ever returns `LoomValue`.
+ */
+function printPropExpr(expr: Expr, valueType: LoomType, boundIdents: readonly string[]): string {
+  if (expr.type === "literal") return JSON.stringify(expr.value);
+  const env = boundIdents.length > 0 ? `{ ...__env, ${boundIdents.join(", ")} }` : "__env";
+  const call = `evaluate(${JSON.stringify(expr)}, ${env})`;
+  return valueType.kind === "bool" ? `${call} === true` : `(${call} as ${loomTypeToTs(valueType)})`;
 }
 
 /**
@@ -91,13 +115,16 @@ function printHandlers(handlers: readonly Handler[], fieldsByName: ReadonlyMap<s
 }
 
 /**
- * A `text` node needs `{}` braces only when it appears as a JSX element
- * child (a bare JS string isn't valid JSX text) — as an attribute value or
- * inside a fragment, the caller already supplies the one wrapping `{}` an
- * attribute needs. Every other kind already prints valid JSX on its own.
+ * A `text`/`each` node needs `{}` braces only when it appears as a JSX
+ * element child (a bare JS string/expression isn't valid JSX text) — as an
+ * attribute value or inside a fragment, the caller already supplies the one
+ * wrapping `{}` an attribute needs. Every other kind already prints valid
+ * JSX on its own.
  */
-function printElementChild(node: RenderNode, fieldsByName: ReadonlyMap<string, FieldNode>): string {
-  return node.kind === "text" ? `{${printInline(node, fieldsByName)}}` : printInline(node, fieldsByName);
+function printElementChild(node: RenderNode, fieldsByName: ReadonlyMap<string, FieldNode>, boundIdents: readonly string[]): string {
+  return node.kind === "text" || node.kind === "each"
+    ? `{${printInline(node, fieldsByName, boundIdents)}}`
+    : printInline(node, fieldsByName, boundIdents);
 }
 
 /**
@@ -106,19 +133,38 @@ function printElementChild(node: RenderNode, fieldsByName: ReadonlyMap<string, F
  * by its caller in `emitReact`) is ever multi-line. `slot` doesn't appear in
  * a composition tree (Phase 1b's path is a distinct, non-composed one), so
  * it isn't handled here.
+ *
+ * `boundIdents` names every `each` ident currently in scope, innermost last
+ * — threaded down so a prop's `{expr}` (via `printPropExpr`) knows to merge
+ * them into the env it evaluates against. `leadingAttrs` exists for exactly
+ * one caller, `each`'s own case below: injecting `key={...}` as the first
+ * JSX attribute on its single templated child, the same "extra attrs from
+ * the caller" shape `printElement`'s Angular counterpart already uses for
+ * `*ngIf`/`*ngFor`.
  */
-function printInline(node: RenderNode, fieldsByName: ReadonlyMap<string, FieldNode>): string {
+function printInline(
+  node: RenderNode,
+  fieldsByName: ReadonlyMap<string, FieldNode>,
+  boundIdents: readonly string[] = [],
+  leadingAttrs: readonly string[] = []
+): string {
   switch (node.kind) {
     case "text":
       return JSON.stringify((node.value as Extract<Expr, { type: "literal" }>).value);
     case "fragment": {
-      const inner = node.children.map((c) => printInline(c, fieldsByName)).join("");
+      const inner = node.children.map((c) => printInline(c, fieldsByName, boundIdents)).join("");
       return `<>${inner}</>`;
     }
     case "when": {
       const cond = condToJs(node.cond);
-      const inner = node.then.map((c) => printInline(c, fieldsByName)).join("");
+      const inner = node.then.map((c) => printInline(c, fieldsByName, boundIdents)).join("");
       return `{${cond} && ${inner}}`;
+    }
+    case "each": {
+      const source = printBareRef(node.over);
+      const keyAttrs = node.key ? [`key={${printBareRef(node.key)}}`] : [];
+      const body = node.body.map((c) => printInline(c, fieldsByName, [...boundIdents, node.ident], keyAttrs)).join("");
+      return `${source}.map((${node.ident}) => (${body}))`;
     }
     case "element": {
       const staticAttrs = node.attrs.map((a) => {
@@ -132,30 +178,34 @@ function printInline(node: RenderNode, fieldsByName: ReadonlyMap<string, FieldNo
         const Camel = capitalize(camel);
         dynamicAttrs = [`value={${camel}Value}`, `onChange={handle${Camel}Change}`, `aria-invalid={${camel}Touched && !${camel}Valid}`];
       }
-      const attrsStr = [...staticAttrs, ...dynamicAttrs].join(" ");
+      const attrsStr = [...leadingAttrs, ...staticAttrs, ...dynamicAttrs].join(" ");
       if (node.children.length === 0) return `<${node.tag} ${attrsStr} />`;
-      const inner = node.children.map((c) => printElementChild(c, fieldsByName)).join("");
+      const inner = node.children.map((c) => printElementChild(c, fieldsByName, boundIdents)).join("");
       return `<${node.tag} ${attrsStr}>${inner}</${node.tag}>`;
     }
     case "instance": {
       const refName = pascalCase(node.component.name);
       const refSlots = node.component.declarations.filter((d) => d.kind === "slot");
+      const refProps = node.component.declarations.filter((d): d is PropNode => d.kind === "prop");
 
-      const propAttrs = Object.entries(node.props).map(([k, expr]) => `${k}={${printPropExpr(expr)}}`);
+      const propAttrs = Object.entries(node.props).map(([k, expr]) => {
+        const declaredType = refProps.find((p) => p.name === k)!.valueType;
+        return `${k}={${printPropExpr(expr, declaredType, boundIdents)}}`;
+      });
 
       const namedSlotAttrs: string[] = [];
       let defaultChildrenExpr: string | undefined;
       for (const slot of refSlots) {
         const fillNodes = node.fills[slot.name];
         if (!fillNodes) continue;
-        const rendered = fillNodes.map((n) => printInline(n, fieldsByName)).join("");
+        const rendered = fillNodes.map((n) => printInline(n, fieldsByName, boundIdents)).join("");
         if (slot.name === "default") defaultChildrenExpr = rendered;
         else namedSlotAttrs.push(`${slotPropName(slot.name)}={${rendered}}`);
       }
 
       const onAttrs = printHandlers(node.handlers, fieldsByName);
 
-      const attrs = [...propAttrs, ...namedSlotAttrs, ...onAttrs];
+      const attrs = [...leadingAttrs, ...propAttrs, ...namedSlotAttrs, ...onAttrs];
       const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
       return defaultChildrenExpr !== undefined
         ? `<${refName}${attrsStr}>{${defaultChildrenExpr}}</${refName}>`

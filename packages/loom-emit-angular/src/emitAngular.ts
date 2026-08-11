@@ -1,4 +1,4 @@
-import type { Attr, ComponentNode, DerivedNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode } from "loom-ir";
+import type { Attr, ComponentNode, DerivedNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode, UsesNode } from "loom-ir";
 import { lower, lowerComposition } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import {
@@ -40,9 +40,34 @@ function printRenderNodes(nodes: readonly RenderNode[]): string {
   ].join("");
 }
 
-/** Name of the class getter backing one composed node's one `{expr}` prop — e.g. `login-button` + `disabled` -> `loginButtonDisabled`. */
+/** Name of the class getter (or, for an each-template node, method) backing one composed node's one `{expr}` prop — e.g. `login-button` + `disabled` -> `loginButtonDisabled`. */
 function computedPropGetterName(nodeName: string, propName: string): string {
   return `${camelCase(nodeName)}${capitalize(camelCase(propName))}`;
+}
+
+/** Name of the `trackBy` method backing one `each`'s `key` — e.g. ident `task` -> `trackByTask`. */
+function trackByMethodName(ident: string): string {
+  return `trackBy${capitalize(camelCase(ident))}`;
+}
+
+/**
+ * Maps an each-template node's name to its bound ident. A zero-arg getter
+ * can't see a loop variable — Angular's "emitters become printers" claim is
+ * really "printer plus lambda-lifter" for exactly this reason (§ plan) — so
+ * a template node's own computed-prop getters become parameterized methods
+ * instead; this is what tells the getter-generation loop, and `printPropAttr`,
+ * which nodes need that. Built once, from the composition array directly
+ * (not from the render tree), the same way the getter-generation loop
+ * already walks `component.composition` rather than a lowered tree.
+ */
+function eachTemplateIdents(nodes: readonly UsesNode[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const node of nodes) {
+    for (const content of Object.values(node.slotContent ?? {})) {
+      if ("each" in content) map.set(content.each.use, content.each.as);
+    }
+  }
+  return map;
 }
 
 /**
@@ -75,8 +100,11 @@ function angularBinding(key: string, value: unknown): string {
   return typeof value === "string" ? `[${key}]="'${value.replace(/'/g, "\\'")}'"` : `[${key}]="${JSON.stringify(value)}"`;
 }
 
-function printPropAttr(k: string, expr: Expr, instanceName: string): string {
-  return expr.type === "literal" ? angularBinding(k, expr.value) : `[${k}]="${computedPropGetterName(instanceName, k)}"`;
+/** `boundIdent` set means `instanceName` is an each-template — the reference becomes a method call passing the loop variable, not a bare getter reference. */
+function printPropAttr(k: string, expr: Expr, instanceName: string, boundIdent: string | undefined): string {
+  if (expr.type === "literal") return angularBinding(k, expr.value);
+  const name = computedPropGetterName(instanceName, k);
+  return `[${k}]="${boundIdent ? `${name}(${boundIdent})` : name}"`;
 }
 
 /**
@@ -104,14 +132,28 @@ function printHandlers(handlers: readonly Handler[]): string[] {
 }
 
 /**
- * `extraAttrsFirst` exists for exactly one caller: `printWhen`, when a
- * `when` wraps a single element (a field's error span) — Angular attaches
- * `*ngIf` as an attribute on that element directly rather than wrapping it,
- * unlike an `instance`, which always gets a real `<ng-container>` wrapper
- * (an element has no separate "outer" tag to wrap with; an instance's own
- * tag already exists to carry other bindings).
+ * `over`/`key` on an `each` node are always a plain `ref`/`member` chain by
+ * construction (`lower.ts` only ever builds them that way) — an Angular
+ * template expression references a component member (or, inside an
+ * `*ngFor`, its own template variable) bare, with no `this.` prefix, same
+ * as every other template expression this file already prints.
  */
-function printElement(node: Extract<RenderNode, { kind: "element" }>, extraAttrsFirst: string[] = []): string {
+function printBareRef(expr: Expr): string {
+  if (expr.type === "ref") return expr.name;
+  if (expr.type === "member") return `${printBareRef(expr.target)}.${expr.property}`;
+  throw new Error(`printBareRef: unsupported expr type '${expr.type}'`);
+}
+
+/**
+ * `extraAttrsFirst` exists for two callers: `printWhen`, when a `when` wraps
+ * a single element (a field's error span) — Angular attaches `*ngIf` as an
+ * attribute on that element directly rather than wrapping it — and
+ * `printInline`'s `each` case, attaching `*ngFor` the same way, unlike an
+ * `instance`, which always gets a real `<ng-container>` wrapper (an element
+ * has no separate "outer" tag to wrap with; an instance's own tag already
+ * exists to carry other bindings).
+ */
+function printElement(node: Extract<RenderNode, { kind: "element" }>, eachIdents: ReadonlyMap<string, string>, extraAttrsFirst: string[] = []): string {
   const staticAttrs = node.attrs.map((a) => {
     if (a.kind !== "static") throw new Error(`printElement: unsupported attr kind '${a.kind}'`);
     return `${a.name}="${a.value}"`;
@@ -125,24 +167,29 @@ function printElement(node: Extract<RenderNode, { kind: "element" }>, extraAttrs
   }
   const attrsStr = [...extraAttrsFirst, ...staticAttrs, ...dynamicAttrs].join(" ");
   if (node.children.length === 0) return `<${node.tag} ${attrsStr} />`;
-  return `<${node.tag} ${attrsStr}>${node.children.map(printInline).join("")}</${node.tag}>`;
+  return `<${node.tag} ${attrsStr}>${node.children.map((c) => printInline(c, eachIdents)).join("")}</${node.tag}>`;
 }
 
-function printInstance(node: Extract<RenderNode, { kind: "instance" }>): string {
+function printInstance(
+  node: Extract<RenderNode, { kind: "instance" }>,
+  eachIdents: ReadonlyMap<string, string>,
+  extraAttrsFirst: string[] = []
+): string {
   const selector = `loom-${node.component.name}`;
   const refSlots = node.component.declarations.filter((d) => d.kind === "slot");
+  const boundIdent = eachIdents.get(node.name);
 
-  const propAttrs = Object.entries(node.props).map(([k, expr]) => printPropAttr(k, expr, node.name));
+  const propAttrs = Object.entries(node.props).map(([k, expr]) => printPropAttr(k, expr, node.name, boundIdent));
 
   const body: string[] = [];
   for (const slot of refSlots) {
     const fillNodes = node.fills[slot.name];
     if (!fillNodes) continue;
-    const inner = fillNodes.map(printInline).join("");
+    const inner = fillNodes.map((n) => printInline(n, eachIdents)).join("");
     body.push(slot.name === "default" ? inner : `<div slot="${slot.name}">${inner}</div>`);
   }
 
-  const attrs = [...propAttrs, ...printHandlers(node.handlers)];
+  const attrs = [...extraAttrsFirst, ...propAttrs, ...printHandlers(node.handlers)];
   const attrsStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
   return `<${selector}${attrsStr}>${body.join("")}</${selector}>`;
 }
@@ -153,12 +200,12 @@ function printInstance(node: Extract<RenderNode, { kind: "instance" }>): string 
  * current example produces a `when` whose `then` isn't a single element or
  * a single instance.
  */
-function printWhen(node: Extract<RenderNode, { kind: "when" }>): string {
+function printWhen(node: Extract<RenderNode, { kind: "when" }>, eachIdents: ReadonlyMap<string, string>): string {
   const condJs = condToJs(node.cond);
   const only = node.then.length === 1 ? node.then[0]! : undefined;
-  if (only?.kind === "instance") return `<ng-container *ngIf="${condJs}">${printInstance(only)}</ng-container>`;
-  if (only?.kind === "element") return printElement(only, [`*ngIf="${condJs}"`]);
-  return `<ng-container *ngIf="${condJs}">${node.then.map(printInline).join("")}</ng-container>`;
+  if (only?.kind === "instance") return `<ng-container *ngIf="${condJs}">${printInstance(only, eachIdents)}</ng-container>`;
+  if (only?.kind === "element") return printElement(only, eachIdents, [`*ngIf="${condJs}"`]);
+  return `<ng-container *ngIf="${condJs}">${node.then.map((c) => printInline(c, eachIdents)).join("")}</ng-container>`;
 }
 
 /**
@@ -169,19 +216,34 @@ function printWhen(node: Extract<RenderNode, { kind: "when" }>): string {
  * `slot` doesn't appear in a composition tree (Phase 1b's path is distinct),
  * so it isn't handled here. `fragment` prints as bare concatenation — unlike
  * React, Angular has no fragment-wrapper syntax at all.
+ *
+ * `eachIdents` (built once by `eachTemplateIdents`) tells `printInstance`
+ * which node, if any, is the current `each`'s template, so its `{expr}`
+ * props print as a method call passing the loop variable rather than a
+ * bare getter reference.
  */
-function printInline(node: RenderNode): string {
+function printInline(node: RenderNode, eachIdents: ReadonlyMap<string, string>): string {
   switch (node.kind) {
     case "text":
       return escapeHtml(String((node.value as Extract<Expr, { type: "literal" }>).value));
     case "fragment":
-      return node.children.map(printInline).join("");
+      return node.children.map((c) => printInline(c, eachIdents)).join("");
     case "when":
-      return printWhen(node);
+      return printWhen(node, eachIdents);
+    case "each": {
+      const only = node.body[0]!;
+      if (node.body.length !== 1 || only.kind !== "instance") {
+        throw new Error(`printInline: 'each' body must be a single instance, got ${node.body.map((n) => n.kind).join(", ")}`);
+      }
+      const source = printBareRef(node.over);
+      const trackBy = node.key ? `; trackBy: ${trackByMethodName(node.ident)}` : "";
+      const ngFor = `*ngFor="let ${node.ident} of ${source}${trackBy}"`;
+      return printInstance(only, eachIdents, [ngFor]);
+    }
     case "element":
-      return printElement(node);
+      return printElement(node, eachIdents);
     case "instance":
-      return printInstance(node);
+      return printInstance(node, eachIdents);
     default:
       throw new Error(`printInline: unsupported render node kind '${node.kind}'`);
   }
@@ -298,7 +360,8 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   // into the same `when` node a nested field-error gets, and `printInline`
   // handles both identically (see its doc comment for why that's safe here
   // but not for React).
-  const templateBody = rootUses ? printInline(lowerComposition(rootUses, component)) : printRenderNodes(lower(component));
+  const eachIdents = eachTemplateIdents(component.composition);
+  const templateBody = rootUses ? printInline(lowerComposition(rootUses, component), eachIdents) : printRenderNodes(lower(component));
   const template = `<div ${attrs.join(" ")}>${templateBody}</div>`;
 
   const importsArr = [...referencedComponents.map((c) => `${pascalCase(c.name)}Component`), ...(usesNgIf ? ["NgIf"] : [])];
@@ -352,11 +415,40 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     lines.push(``);
   }
 
+  // A template node's own computed-prop {expr}s become parameterized methods, not zero-arg
+  // getters — a getter can't see the each's own loop variable (§ eachTemplateIdents' doc comment,
+  // "printer plus lambda-lifter"). Every other computed prop keeps the plain getter form.
   for (const node of component.composition) {
+    const boundIdent = eachIdents.get(node.name);
     for (const [propName, value] of Object.entries(node.props ?? {})) {
       if (!isComputedPropValue(value)) continue;
-      lines.push(`  get ${computedPropGetterName(node.name, propName)}(): boolean {`);
-      lines.push(`    return evaluate(${JSON.stringify(value.expr)}, ${envLiteral(props, fields, derivedValues)}) === true;`);
+      const declaredType = node.resolvedComponent.declarations.find(
+        (d): d is PropNode => d.kind === "prop" && d.name === propName
+      )!.valueType;
+      const tsType = loomTypeToTs(declaredType);
+      const env = boundIdent ? `{ ...${envLiteral(props, fields, derivedValues)}, ${boundIdent} }` : envLiteral(props, fields, derivedValues);
+      const call = `evaluate(${JSON.stringify(value.expr)}, ${env})`;
+      const result = declaredType.kind === "bool" ? `${call} === true` : `${call} as ${tsType}`;
+      const name = computedPropGetterName(node.name, propName);
+      if (boundIdent) {
+        lines.push(`  ${name}(${boundIdent}: any): ${tsType} {`);
+      } else {
+        lines.push(`  get ${name}(): ${tsType} {`);
+      }
+      lines.push(`    return ${result};`);
+      lines.push(`  }`);
+      lines.push(``);
+    }
+  }
+
+  // One `trackBy` method per each.key — the function form Angular's `*ngFor` trackBy requires,
+  // not an inline expression the way React's `key={...}` is.
+  for (const node of component.composition) {
+    for (const content of Object.values(node.slotContent ?? {})) {
+      if (!("each" in content) || !content.each.key) continue;
+      const { as, key } = content.each;
+      lines.push(`  ${trackByMethodName(as)}(index: number, ${as}: any): any {`);
+      lines.push(`    return ${as}.${key};`);
       lines.push(`  }`);
       lines.push(``);
     }

@@ -119,6 +119,30 @@ describe("validateNodeBlock", () => {
     expect(block.kind).toBe("uses");
   });
 
+  it("accepts slotContent.each with an optional key", () => {
+    const block = validateNodeBlock({
+      kind: "uses",
+      component: "list",
+      slotContent: { default: { each: { over: "tasks", as: "task", use: "item-template", key: "id" } } },
+    });
+    expect(block.kind).toBe("uses");
+  });
+
+  it("accepts slotContent.each without key", () => {
+    const block = validateNodeBlock({
+      kind: "uses",
+      component: "list",
+      slotContent: { default: { each: { over: "tasks", as: "task", use: "item-template" } } },
+    });
+    expect(block.kind).toBe("uses");
+  });
+
+  it("rejects slotContent.each missing a required field", () => {
+    expect(() =>
+      validateNodeBlock({ kind: "uses", component: "list", slotContent: { default: { each: { over: "tasks", as: "task" } } } })
+    ).toThrow(SchemaValidationError);
+  });
+
   it("accepts on as a single onWireTarget object with a payload", () => {
     const block = validateNodeBlock({
       kind: "uses",

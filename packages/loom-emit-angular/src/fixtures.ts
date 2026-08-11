@@ -418,3 +418,66 @@ export function makeDerivedFixture(): ComponentNode {
     composition: [dialogUses, submitButton],
   });
 }
+
+/**
+ * A `task-list` composing a `list` (root, one `default` slot) whose slot is
+ * filled by an `each` over `tasks` — a `list<record{id,label,done}>` prop —
+ * instantiating a leaf `list-item` template once per element. The template's
+ * `label`/`done` props are `{expr}`s referencing the bound `task` ident
+ * (`task.label`/`task.done`), exercising the parameterized-method
+ * (lambda-lifted) form of a computed-prop and its non-bool cast path
+ * (`label` is `string`, not `bool` — no existing fixture before this one
+ * ever computed a non-bool `{expr}` prop).
+ */
+export function makeEachFixture(): ComponentNode {
+  const list = makeChildComponent("list", {
+    declarations: [{ id: "list/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" }],
+  });
+  const listItem = makeChildComponent("list-item", {
+    declarations: [
+      { id: "list-item/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" } },
+      { id: "list-item/declarations/done", kind: "prop", origin: "own", assertable: false, name: "done", valueType: { kind: "bool" }, defaultValue: false },
+    ],
+  });
+
+  const itemsProp = {
+    id: "task-list/declarations/tasks",
+    kind: "prop" as const,
+    origin: "own" as const,
+    assertable: false as const,
+    name: "tasks",
+    valueType: { kind: "list" as const, of: { kind: "record" as const, fields: { id: { kind: "string" as const }, label: { kind: "string" as const }, done: { kind: "bool" as const } } } },
+    defaultValue: [],
+  };
+
+  const itemTemplate: UsesNode = {
+    id: "task-list/composition/item-template",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "item-template",
+    component: "list-item",
+    resolvedComponent: listItem,
+    props: {
+      label: { expr: parseExpr("task.label") },
+      done: { expr: parseExpr("task.done") },
+    },
+  };
+
+  const listUses: UsesNode = {
+    id: "task-list/composition/list-instance",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "list-instance",
+    component: "list",
+    resolvedComponent: list,
+    root: true,
+    slotContent: { default: { each: { over: "tasks", as: "task", use: "item-template", key: "id" } } },
+  };
+
+  return makeChildComponent("task-list", {
+    declarations: [itemsProp],
+    composition: [listUses, itemTemplate],
+  });
+}

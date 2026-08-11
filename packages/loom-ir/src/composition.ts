@@ -101,22 +101,29 @@ export function checkComposition(component: ComponentNode): void {
   }
 
   // Every reference to a sibling name must resolve, and be claimed by at most one parent.
+  // An `each.use` claims its template node exactly the way a `uses` entry claims a child —
+  // structurally, it's the same "this name is spoken for by that slot" relationship; the
+  // over/as/key semantics are checked later, once we're past pure tree shape.
   const claimedBy = new Map<string, string>(); // childName -> "<parentName>/<slotName>"
+  const claim = (childName: string, node: (typeof nodes)[number], slotName: string): void => {
+    if (!byName.has(childName)) {
+      throw new CompositionCheckError(
+        `composition node '${node.id}' slot '${slotName}' references unknown composition node '${childName}'`
+      );
+    }
+    if (claimedBy.has(childName)) {
+      throw new CompositionCheckError(
+        `composition node '${childName}' is claimed by more than one parent slot ('${claimedBy.get(childName)}' and '${node.name}/${slotName}')`
+      );
+    }
+    claimedBy.set(childName, `${node.name}/${slotName}`);
+  };
   for (const node of nodes) {
     for (const [slotName, content] of Object.entries(node.slotContent ?? {})) {
-      if (!("uses" in content)) continue;
-      for (const childName of content.uses) {
-        if (!byName.has(childName)) {
-          throw new CompositionCheckError(
-            `composition node '${node.id}' slot '${slotName}' references unknown composition node '${childName}'`
-          );
-        }
-        if (claimedBy.has(childName)) {
-          throw new CompositionCheckError(
-            `composition node '${childName}' is claimed by more than one parent slot ('${claimedBy.get(childName)}' and '${node.name}/${slotName}')`
-          );
-        }
-        claimedBy.set(childName, `${node.name}/${slotName}`);
+      if ("uses" in content) {
+        for (const childName of content.uses) claim(childName, node, slotName);
+      } else if ("each" in content) {
+        claim(content.each.use, node, slotName);
       }
     }
   }
@@ -140,6 +147,7 @@ export function checkComposition(component: ComponentNode): void {
     visited.add(current);
     for (const content of Object.values(byName.get(current)!.slotContent ?? {})) {
       if ("uses" in content) stack.push(...content.uses);
+      else if ("each" in content) stack.push(content.each.use);
     }
   }
   if (visited.size !== nodes.length) {
@@ -156,12 +164,30 @@ export function checkComposition(component: ComponentNode): void {
     },
   };
 
+  // Which composition nodes are an `each`'s template, and what bound ident/element type their
+  // own `{ expr }` props should see (loom-expr's `typecheck`'s `bound` param, already built for
+  // exactly this shadowing case). Built as its own pass — ahead of the per-node loop below, so it
+  // doesn't depend on `each.use` being declared after the `each` that references it — and
+  // deliberately permissive about a malformed `each.over` here; the real error is thrown by the
+  // dedicated `each` validation inside that loop, once per occurrence, with full context.
+  const eachTemplateBinding = new Map<string, { as: string; itemType: LoomType }>();
+  for (const node of nodes) {
+    for (const content of Object.values(node.slotContent ?? {})) {
+      if (!("each" in content)) continue;
+      const overProp = ownProps.find((p) => p.name === content.each.over);
+      if (!overProp || overProp.valueType.kind !== "list") continue;
+      eachTemplateBinding.set(content.each.use, { as: content.each.as, itemType: overProp.valueType.of });
+    }
+  }
+
   // Cross-reference each node's props/slotContent/on keys against the referenced component's real declarations.
   for (const node of nodes) {
     const referenced = node.resolvedComponent;
     const declaredProps = new Set(referenced.declarations.filter((d) => d.kind === "prop").map((d) => d.name));
     const declaredSlots = new Set(referenced.declarations.filter((d) => d.kind === "slot").map((d) => d.name));
     const declaredEvents = new Set(referenced.declarations.filter((d) => d.kind === "event").map((d) => d.name));
+    const binding = eachTemplateBinding.get(node.name);
+    const bound = binding ? { [binding.as]: binding.itemType } : {};
 
     for (const [propName, propValue] of Object.entries(node.props ?? {})) {
       if (!declaredProps.has(propName)) {
@@ -173,7 +199,7 @@ export function checkComposition(component: ComponentNode): void {
         )!.valueType;
         let exprType: LoomType;
         try {
-          exprType = typecheck(propValue.expr, exprPropCtx);
+          exprType = typecheck(propValue.expr, exprPropCtx, bound);
         } catch (e) {
           throw new CompositionCheckError(
             `composition node '${node.id}' prop '${propName}' has an invalid computed expression: ${(e as Error).message}`
@@ -189,6 +215,31 @@ export function checkComposition(component: ComponentNode): void {
     for (const [slotName, content] of Object.entries(node.slotContent ?? {})) {
       if (!declaredSlots.has(slotName)) {
         throw new CompositionCheckError(`composition node '${node.id}' fills slot '${slotName}' which '${node.component}' does not declare`);
+      }
+      if ("each" in content) {
+        // each.use's own resolvability was already checked structurally, alongside `uses`, in the
+        // claiming pass above — nothing left to validate here but the semantics `uses` doesn't have.
+        const { over, key } = content.each;
+        const overProp = ownProps.find((p) => p.name === over);
+        if (!overProp) {
+          throw new CompositionCheckError(
+            `composition node '${node.id}' slot '${slotName}' each.over '${over}' is not a declared prop on '${component.id}'`
+          );
+        }
+        if (overProp.valueType.kind !== "list") {
+          throw new CompositionCheckError(
+            `composition node '${node.id}' slot '${slotName}' each.over '${over}' must be a list-typed prop, got '${typeToString(overProp.valueType)}'`
+          );
+        }
+        if (key !== undefined) {
+          const itemType = overProp.valueType.of;
+          if (itemType.kind !== "record" || !(key in itemType.fields)) {
+            throw new CompositionCheckError(
+              `composition node '${node.id}' slot '${slotName}' each.key '${key}' is not a field of '${over}''s item type ('${typeToString(itemType)}')`
+            );
+          }
+        }
+        continue;
       }
       if ("fields" in content) {
         for (const fieldName of content.fields) {

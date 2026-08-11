@@ -258,9 +258,41 @@ export interface OnWireTarget {
 /** A bare string is sugar for `{ event: string }` — an empty-payload forward, the only shape `on` originally had. */
 export type OnWire = string | OnWireTarget;
 
+/**
+ * Renders one sibling `UsesNode` once per element of a list-typed prop on
+ * *this* component — the one iteration mechanism the composition surface
+ * has. `over` names that prop (must resolve to `list<T>`); `as` is the
+ * bound name each rendered instance's own `{expr}` props/`slotContent` may
+ * reference (checked against `T`, the list's element type — see
+ * `checkComposition`'s `bound` typecheck extension); `use` names the
+ * sibling `UsesNode` instantiated once per element, the same way `uses`
+ * names one instantiated exactly once; `key` (optional) names a field of
+ * `T` — `T` must be a `record` for `key` to be set at all — used as
+ * React's `key`/Angular's `trackBy`.
+ *
+ * `use`'s own node is claimed by this `each`, the same way a plain
+ * `slotContent.*.uses` entry claims a node — it must not *also* appear in a
+ * `uses` list, and (like every other composition node) must be reachable
+ * from the tree's one root.
+ *
+ * Known gap, same one `DerivedNode` already documents: `as` follows the
+ * same bare-identifier convention every bound name needs, but a hyphenated
+ * `as` can be declared here yet never actually *referenced* from the
+ * template node's `{expr}` values, for the same `loom-expr` lexer reason.
+ * Give `as` a single word.
+ */
+export interface EachSlotContent {
+  each: {
+    over: string;
+    as: string;
+    use: string;
+    key?: string;
+  };
+}
+
 export interface UsesNode extends LoomNodeEnvelope {
   kind: "uses";
-  /** This instance's own local name — referenced by other UsesNodes' slotContent.*.uses. */
+  /** This instance's own local name — referenced by other UsesNodes' slotContent.*.uses, or by an `each.use`. */
   name: string;
   /** Sibling spec slug to instantiate, resolved like `extends`. */
   component: SpecRef;
@@ -270,8 +302,8 @@ export interface UsesNode extends LoomNodeEnvelope {
   root?: boolean;
   /** Literal or live-computed prop values passed to the child instance. */
   props?: Record<string, PropValue>;
-  /** Per-slot-name literal text, an ordered list of other UsesNode `name`s, or a list of this component's own declared FieldNode names to render natively in that slot. */
-  slotContent?: Record<string, { text: string } | { uses: string[] } | { fields: string[] }>;
+  /** Per-slot-name literal text, an ordered list of other UsesNode `name`s, this component's own declared FieldNode names to render natively, or an `each` iterating a list-typed prop. */
+  slotContent?: Record<string, { text: string } | { uses: string[] } | { fields: string[] } | EachSlotContent>;
   /** Maps this embedded child instance's declared event name to one or more of this component's own declared events to fire. */
   on?: Record<string, OnWire | OnWire[]>;
   /** Root node only: name of a bool prop on this component gating whether the composed subtree renders at all. */

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitAngular } from "./emitAngular.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture, makeEachFixture } from "./fixtures.js";
 
 describe("emitAngular", () => {
   it("emits one *.component.ts file per component", () => {
@@ -201,5 +201,54 @@ describe("emitAngular — authored derived values", () => {
     expect(emailValid).toBe(false);
     expect(invalid).toBe(true);
     expect(disabled).toBe(true);
+  });
+});
+
+describe("emitAngular — each (iteration)", () => {
+  it("prints *ngFor with trackBy on the templated instance's own tag, not a wrapper", () => {
+    const [file] = emitAngular(makeEachFixture());
+    expect(file!.contents).toContain('<loom-list-item *ngFor="let task of tasks; trackBy: trackByTask"');
+  });
+
+  it("prints a trackBy method returning the each.key field off the bound ident", () => {
+    const [file] = emitAngular(makeEachFixture());
+    expect(file!.contents).toContain("trackByTask(index: number, task: any): any {");
+    expect(file!.contents).toContain("return task.id;");
+  });
+
+  it("a template node's computed {expr} prop becomes a parameterized method, not a zero-arg getter — the lambda-lifting a loop variable forces", () => {
+    const [file] = emitAngular(makeEachFixture());
+    expect(file!.contents).toContain("itemTemplateLabel(task: any): string {");
+    expect(file!.contents).not.toContain("get itemTemplateLabel()");
+    expect(file!.contents).toContain('[label]="itemTemplateLabel(task)"');
+  });
+
+  it("a bool-typed template prop keeps the historical === true coercion; a non-bool one casts through loomTypeToTs instead", () => {
+    const [file] = emitAngular(makeEachFixture());
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"done"}, { ...{ tasks: this.tasks }, task }) === true;'
+    );
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"member","target":{"type":"ref","name":"task"},"property":"label"}, { ...{ tasks: this.tasks }, task }) as string;'
+    );
+  });
+
+  it("the emitted methods actually evaluate each item's props correctly (proves the emission is sound)", () => {
+    const labelExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "label" };
+    const doneExpr = { type: "member" as const, target: { type: "ref" as const, name: "task" }, property: "done" };
+    const tasks = [
+      { id: "a", label: "Buy milk", done: false },
+      { id: "b", label: "Walk dog", done: true },
+    ];
+    const env = { tasks };
+    const rendered = tasks.map((task) => ({
+      key: task.id,
+      label: evaluate(labelExpr, { ...env, task }) as string,
+      done: evaluate(doneExpr, { ...env, task }) === true,
+    }));
+    expect(rendered).toEqual([
+      { key: "a", label: "Buy milk", done: false },
+      { key: "b", label: "Walk dog", done: true },
+    ]);
   });
 });
