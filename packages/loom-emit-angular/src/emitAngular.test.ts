@@ -100,9 +100,9 @@ describe("emitAngular", () => {
     expect(file!.contents).not.toContain("dispatch(eventName");
   });
 
-  it("adds styleUrls and a static root class when the component has style nodes", () => {
+  it("adds styleUrls (from generated/styles/) and a static root class when the component has style nodes", () => {
     const [file] = emitAngular(makeStyledFixture());
-    expect(file!.contents).toContain(`styleUrls: ["./Checkbox.css"],`);
+    expect(file!.contents).toContain(`styleUrls: ["../styles/Checkbox.css"],`);
     expect(file!.contents).toContain(`class="loom-checkbox"`);
   });
 

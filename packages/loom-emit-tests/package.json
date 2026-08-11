@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "loom-ir": "workspace:*",
-    "loom-expr": "workspace:*"
+    "loom-expr": "workspace:*",
+    "loom-emit-core": "workspace:*"
   },
   "devDependencies": {
     "fast-check": "^3.22.0"

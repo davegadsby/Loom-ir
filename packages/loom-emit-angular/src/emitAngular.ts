@@ -433,7 +433,10 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   lines.push(`  standalone: true,`);
   if (importsArr.length > 0) lines.push(`  imports: [${importsArr.join(", ")}],`);
   lines.push(`  template: \`${template}\`,`);
-  if (styledParts.size > 0) lines.push(`  styleUrls: [${JSON.stringify(`./${componentName}.css`)}],`);
+  // Only examples/regenerate.ts actually emits CSS today, and it writes into its own
+  // generated/styles/ directory, a sibling of generated/angular/ — the URL must match
+  // that layout, not assume the CSS sits next to the component.
+  if (styledParts.size > 0) lines.push(`  styleUrls: [${JSON.stringify(`../styles/${componentName}.css`)}],`);
   lines.push(`})`);
   const implementsClauses = [hasFiresWhen ? "OnChanges" : undefined, seedProp ? "OnInit" : undefined].filter(
     (c): c is string => c !== undefined

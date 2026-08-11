@@ -319,7 +319,10 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
       : undefined,
     `import * as React from "react";`,
     component.transitions.length > 0 ? `import { LoomMachine, Transition, Guard } from "loom-expr";` : undefined,
-    styledParts.size > 0 ? `import "./${componentName}.css";` : undefined,
+    // Only examples/regenerate.ts actually emits CSS today, and it writes into
+    // its own generated/styles/ directory, a sibling of generated/react/ — the
+    // import must match that layout, not assume the CSS sits next to the component.
+    styledParts.size > 0 ? `import "../styles/${componentName}.css";` : undefined,
     ...referencedComponents.map((c) => `import { ${pascalCase(c.name)} } from "./${pascalCase(c.name)}";`),
     ``,
   ].filter((l): l is string => l !== undefined);

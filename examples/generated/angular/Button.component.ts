@@ -5,7 +5,7 @@ import { Component, EventEmitter, Input, Output } from "@angular/core";
   selector: "loom-button",
   standalone: true,
   template: `<button [attr.data-loom-component]="'button'" class="loom-button" type="button" [disabled]="disabled" (click)="press.emit({  })"><ng-content></ng-content></button>`,
-  styleUrls: ["./Button.css"],
+  styleUrls: ["../styles/Button.css"],
 })
 export class ButtonComponent {
   /** interactive-base/declarations/disabled */

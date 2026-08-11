@@ -26,5 +26,5 @@
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["generated/react", "generated/angular", "tests", "types"]
+  "include": ["generated/react", "generated/angular", "tests", "stories", "types"]
 }

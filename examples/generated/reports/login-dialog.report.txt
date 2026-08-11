@@ -5,6 +5,8 @@ not-applicable field                login-dialog/declarations/username
 not-applicable field                login-dialog/declarations/password
 not-applicable event                login-dialog/declarations/login
 not-applicable event                login-dialog/declarations/closed
+unverified     property             login-dialog/claims/username-valid-mirrors-the-email-shape
+unverified     property             login-dialog/claims/password-valid-mirrors-its-length
 unverifiable   unexpressible        login-dialog/claims/validity-gated-enablement-is-unexpressible
 not-applicable uses                 login-dialog/composition/dialog-instance
 not-applicable uses                 login-dialog/composition/login-button

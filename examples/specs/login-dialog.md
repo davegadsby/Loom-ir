@@ -130,18 +130,50 @@ on:
 
 ## Claims
 
+### username-valid-mirrors-the-email-shape
+
+```yaml
+kind: property
+ident: username
+domain: string
+predicate: 'usernameValid == matches(username, "^[^\s@]+@[^\s@]+\.[^\s@]+$")'
+```
+
+`usernameValid` is computed automatically for every declared field with
+a `validate` expr (the same value-graph mechanism `signup-dialog`'s own
+property claim already exercises) — this samples arbitrary strings for
+`username` and confirms that computed validity always agrees with an
+independently-written check against the same email shape.
+
+### password-valid-mirrors-its-length
+
+```yaml
+kind: property
+ident: password
+domain: string
+predicate: 'passwordValid == (len(password) >= 8)'
+```
+
+Same mechanism, for the password field's own length-based `validate`
+expr.
+
 ### validity-gated-enablement-is-unexpressible
 
 ```yaml
 kind: unexpressible
 ```
 
-`login-dialog` has no `states`/`transitions` of its own — Login's
-live enablement is a `{expr}` computed prop over field-derived
-validity, and each field's error message is local render logic, not a
-transition. Neither is something the `ScenarioNode`/`PropertyNode` claim
-language (which quantifies over a `states`/`transitions` domain) can
-currently reference. Verifying "Login only enables once both fields
-are valid" and "the error message tracks live validity" end-to-end
-would need an interaction-level test (Storybook play / e2e) outside
-this taxonomy's current reach.
+Each field's own live validity is now covered above, but the joint
+condition Login's `disabled` prop actually gates on —
+`not (usernameValid and passwordValid)`, both fields at once — isn't.
+`PropertyNode.domain` only parses `oneOf`/`range`/`list<...>`/`where`/
+`states`/`transitions`/a bare primitive-type keyword; there's no
+`record{...}` domain syntax to sample `username` and `password`
+together, and pinning either field at its untested default to work
+around that collapses the other side of the `and` to a constant,
+producing a claim that can't actually fail — worse than not shipping
+one. Each field's error message is the same kind of local render logic,
+not a transition. Verifying "Login only enables once both fields are
+valid" and "the error message tracks live validity" end-to-end needs an
+interaction-level test (Storybook play / e2e) outside this taxonomy's
+current reach.

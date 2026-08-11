@@ -10,6 +10,7 @@ not-applicable transition           checkbox/machine/toggle-on
 not-applicable transition           checkbox/machine/toggle-off
 confirmed      property             interactive-base/claims/disabled-not-focusable
 known-gap      scenario             checkbox/claims/click-checks-an-unchecked-box
+unverified     scenario             checkbox/claims/click-unchecks-a-checked-box
 confirmed      property             checkbox/claims/transitions-stay-within-declared-states
 unverifiable   unexpressible        checkbox/claims/touch-latency-feels-instant
 unverified     pattern-conformance  checkbox/a11y/checkbox-pattern

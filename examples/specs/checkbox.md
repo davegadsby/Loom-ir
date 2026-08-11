@@ -88,6 +88,18 @@ to: checked
 
 A single click on an unchecked, enabled checkbox checks it.
 
+### click-unchecks-a-checked-box
+
+```yaml
+kind: scenario
+from: checked
+events:
+  - { kind: event, name: click }
+to: unchecked
+```
+
+A single click on a checked, enabled checkbox unchecks it.
+
 ### transitions-stay-within-declared-states
 
 ```yaml

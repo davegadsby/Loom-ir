@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { emitReact } from "loom-emit-react";
 import { emitAngular } from "loom-emit-angular";
 import { emitComponentCss, emitTokensCss } from "loom-emit-styles";
+import { emitStorybookPlay } from "loom-emit-tests";
 import type { DesignTokens } from "loom-tokens";
 import type { EmittedFile } from "loom-ir";
 import { loadComponent } from "./loadComponent.js";
@@ -61,6 +62,13 @@ describe("examples/generated is up to date with the compiler", () => {
         assertMatchesCommitted(join(generatedDir, "react"), emitReact(component));
       });
 
+      it("storybook story matches the committed file, if the component has any scenario claims", () => {
+        const component = loadComponent(join(specsDir, `${name}.md`));
+        // Written into generated/react/ (a story imports its component by relative
+        // path), not generated/tests/ — see examples/regenerate.ts.
+        assertMatchesCommitted(join(generatedDir, "react"), emitStorybookPlay(component));
+      });
+
       it("angular output matches the committed file", () => {
         const component = loadComponent(join(specsDir, `${name}.md`));
         assertMatchesCommitted(join(generatedDir, "angular"), emitAngular(component));
@@ -94,6 +102,7 @@ describe("examples/generated is up to date with the compiler", () => {
     for (const name of components) {
       const component = loadComponent(join(specsDir, `${name}.md`));
       for (const f of emitReact(component)) freshPathsBySubdir.react.add(f.path);
+      for (const f of emitStorybookPlay(component)) freshPathsBySubdir.react.add(f.path);
       for (const f of emitAngular(component)) freshPathsBySubdir.angular.add(f.path);
       for (const f of emitAllTests(component)) freshPathsBySubdir.tests.add(f.path);
       if (component.style.length > 0) freshPathsBySubdir.styles.add(emitComponentCss(component).path);

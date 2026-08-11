@@ -28,6 +28,7 @@ import { loadComponent, writeFiles, emitAllTests } from "loom-cli";
 import { emitReact } from "loom-emit-react";
 import { emitAngular } from "loom-emit-angular";
 import { emitTokensCss, emitComponentCss } from "loom-emit-styles";
+import { emitStorybookPlay } from "loom-emit-tests";
 import { importFigmaVariables, type FigmaVariablesResponse } from "loom-tokens-import-figma";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -72,6 +73,9 @@ for (const name of components) {
   writeFiles(join(generatedDir, "react"), emitReact(component));
   writeFiles(join(generatedDir, "angular"), emitAngular(component));
   writeFiles(join(generatedDir, "tests"), emitAllTests(component));
+  // Storybook stories import the compiled component by relative path, so they
+  // must live alongside it, not in the generic tests output directory above.
+  writeFiles(join(generatedDir, "react"), emitStorybookPlay(component));
 
   // Only components with Style nodes get a stylesheet — nothing to emit otherwise.
   if (component.style.length > 0) {

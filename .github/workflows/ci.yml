@@ -44,3 +44,38 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # Separate from build-and-test: a Storybook build + real-browser test-runner
+  # cycle is meaningfully slower than the fast unit-test job above, and
+  # shouldn't risk that job's speed. GitHub-hosted runners have no
+  # pre-installed browser (unlike local dev, which reuses one via the
+  # `playwright`/`playwright-core` pnpm.overrides pin) — `playwright install`
+  # fetches one fresh here, matching whatever version that pin resolves to.
+  storybook-interaction-tests:
+    name: Storybook Interaction Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Storybook interaction tests (real headless Chromium)
+        run: pnpm run storybook:test:ci
