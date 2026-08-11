@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LoomType } from "loom-expr";
 import { checkComposition, CompositionCheckError } from "./composition.js";
-import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode, DerivedNode } from "./nodes.js";
+import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode, DerivedNode, ResourceNode } from "./nodes.js";
 
 function makeChildComponent(overrides: Partial<ComponentNode> = {}): ComponentNode {
   return {
@@ -677,6 +677,62 @@ describe("checkComposition", () => {
         ],
       });
       expect(() => checkComposition(widget)).toThrow(/invalid computed expression/);
+    });
+  });
+
+  describe("resource", () => {
+    const profileResource: ResourceNode = {
+      id: "widget/declarations/profile",
+      kind: "resource",
+      origin: "own",
+      assertable: false,
+      name: "profile",
+      dataType: { kind: "record", fields: { email: { kind: "string" } } },
+    };
+
+    it("a derived value can reference a resource's value graph type, list<dataType>", () => {
+      const loaded: DerivedNode = {
+        id: "widget/declarations/loaded",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "loaded",
+        valueType: { kind: "bool" },
+        expr: { type: "unop", op: "not", expr: { type: "builtin", name: "isEmpty", args: [{ type: "ref", name: "profile" }] } },
+      };
+      const widget = makeWidget({ declarations: [profileResource, loaded] });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("rejects a derived expression that treats a resource as anything other than list<dataType>", () => {
+      const wrong: DerivedNode = {
+        id: "widget/declarations/wrong",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "wrong",
+        valueType: { kind: "string" },
+        expr: { type: "member", target: { type: "ref", name: "profile" }, property: "email" },
+      };
+      const widget = makeWidget({ declarations: [profileResource, wrong] });
+      expect(() => checkComposition(widget)).toThrow(/invalid expression/);
+    });
+
+    it("lets a composed {expr} prop reference a resource's value graph type", () => {
+      const widget = makeWidget({
+        declarations: [profileResource],
+        composition: [
+          makeBoolUses({
+            root: true,
+            props: {
+              disabled: {
+                expr: { type: "builtin", name: "isEmpty", args: [{ type: "ref", name: "profile" }] },
+              },
+            },
+          }),
+        ],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
     });
   });
 });

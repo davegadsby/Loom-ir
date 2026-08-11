@@ -8,6 +8,7 @@ export type {
   MethodNode,
   FieldNode,
   DerivedNode,
+  ResourceNode,
   DeclarationNode,
   StateNode,
   TransitionNode,

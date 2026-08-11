@@ -1,4 +1,4 @@
-import type { Attr, ComponentNode, DerivedNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode, UsesNode } from "loom-ir";
+import type { Attr, ComponentNode, DerivedNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode, ResourceNode, UsesNode } from "loom-ir";
 import { lower, lowerComposition, lowerRootHandlers } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import {
@@ -77,11 +77,18 @@ function eachTemplateIdents(nodes: readonly UsesNode[]): Map<string, string> {
  * value's own getter (composition.ts checks its `expr` against only props/
  * fields, never another derived value) and included for a computed-prop
  * getter, which — like React's `__env` — may reference a declared derived
- * value by name.
+ * value by name. A resource is read from its own `@Input()` member exactly
+ * like a prop is — same shorthand-name treatment, no different code path.
  */
-function envLiteral(props: readonly PropNode[], fields: readonly FieldNode[], derived: readonly DerivedNode[] = []): string {
+function envLiteral(
+  props: readonly PropNode[],
+  fields: readonly FieldNode[],
+  derived: readonly DerivedNode[] = [],
+  resources: readonly ResourceNode[] = []
+): string {
   const parts = [
     ...props.map((p) => `${p.name}: this.${camelCase(p.name)}`),
+    ...resources.map((r) => `${r.name}: this.${camelCase(r.name)}`),
     ...fields.flatMap((f) => {
       const c = camelCase(f.name);
       return [`${objectKey(f.name)}: this.${c}`, `${objectKey(`${f.name}Valid`)}: this.${c}Valid`];
@@ -308,6 +315,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   const props = component.declarations.filter((d) => d.kind === "prop");
   const events = component.declarations.filter((d) => d.kind === "event");
   const slots = component.declarations.filter((d) => d.kind === "slot");
+  const resources = component.declarations.filter((d): d is ResourceNode => d.kind === "resource");
   const pattern = component.a11y.find((n) => n.kind === "pattern-conformance");
   const disabledProp = props.find((p) => p.name === "disabled");
   const hasMachine = component.states.length > 0;
@@ -389,6 +397,10 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     lines.push(`  /** ${prop.id} */`);
     lines.push(`  @Input() ${prop.name}: ${loomTypeToTs(prop.valueType)} = ${JSON.stringify(prop.defaultValue ?? null)};`);
   }
+  for (const resource of resources) {
+    lines.push(`  /** ${resource.id} */`);
+    lines.push(`  @Input() ${resource.name}: Array<${loomTypeToTs(resource.dataType)}> = [];`);
+  }
   for (const event of events) {
     lines.push(`  /** ${event.id} */`);
     lines.push(`  @Output() ${event.name} = new EventEmitter<${loomTypeToTs(event.payloadType)}>();`);
@@ -420,7 +432,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
       throw new Error(`emitAngular: derived '${derived.id}' has unsupported valueType kind '${derived.valueType.kind}' (only 'bool' is supported)`);
     }
     lines.push(`  get ${camelCase(derived.name)}(): boolean {`);
-    lines.push(`    return evaluate(${JSON.stringify(derived.expr)}, ${envLiteral(props, fields)}) === true;`);
+    lines.push(`    return evaluate(${JSON.stringify(derived.expr)}, ${envLiteral(props, fields, [], resources)}) === true;`);
     lines.push(`  }`);
     lines.push(``);
   }
@@ -436,7 +448,9 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
         (d): d is PropNode => d.kind === "prop" && d.name === propName
       )!.valueType;
       const tsType = loomTypeToTs(declaredType);
-      const env = boundIdent ? `{ ...${envLiteral(props, fields, derivedValues)}, ${boundIdent} }` : envLiteral(props, fields, derivedValues);
+      const env = boundIdent
+        ? `{ ...${envLiteral(props, fields, derivedValues, resources)}, ${boundIdent} }`
+        : envLiteral(props, fields, derivedValues, resources);
       const call = `evaluate(${JSON.stringify(value.expr)}, ${env})`;
       const result = declaredType.kind === "bool" ? `${call} === true` : `${call} as ${tsType}`;
       const name = computedPropGetterName(node.name, propName);

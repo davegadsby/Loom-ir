@@ -9,6 +9,7 @@ import {
   makeDerivedFixture,
   makeEachFixture,
   makeTriggeredEventFixture,
+  makeResourceFixture,
 } from "./fixtures.js";
 
 describe("emitReact", () => {
@@ -300,5 +301,26 @@ describe("emitReact — EventNode.trigger (real triggers, no machine required)",
     const onClickCount = (file!.contents.match(/onClick=/g) ?? []).length;
     expect(onClickCount).toBe(1);
     expect(file!.contents).toContain('onClick={() => { dispatch("click"); onActivated?.({  }); }}');
+  });
+});
+
+describe("emitReact — resource (async data as list<T>, 0-or-1)", () => {
+  it("declares the resource as an Array<dataType> prop, defaulting to []", () => {
+    const [file] = emitReact(makeResourceFixture());
+    expect(file!.contents).toContain("profile?: Array<{ email: string }>;");
+    expect(file!.contents).toContain("const { profile = [] } = props;");
+  });
+
+  it("a derived value reaches the resource as list<dataType> via isEmpty, exactly like task-list's tasks prop did for each", () => {
+    const [file] = emitReact(makeResourceFixture());
+    expect(file!.contents).toContain(
+      'const loaded = evaluate({"type":"unop","op":"not","expr":{"type":"builtin","name":"isEmpty","args":[{"type":"ref","name":"profile"}]}}, { profile }) === true;'
+    );
+  });
+
+  it("the emitted derived value actually evaluates correctly for both the empty and loaded case (proves the emission is sound)", () => {
+    const expr = { type: "unop" as const, op: "not" as const, expr: { type: "builtin" as const, name: "isEmpty" as const, args: [{ type: "ref" as const, name: "profile" }] } };
+    expect(evaluate(expr, { profile: [] })).toBe(false);
+    expect(evaluate(expr, { profile: [{ email: "a@b.co" }] })).toBe(true);
   });
 });

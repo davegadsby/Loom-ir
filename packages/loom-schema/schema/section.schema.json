@@ -10,6 +10,7 @@
     { "$ref": "#/$defs/method" },
     { "$ref": "#/$defs/field" },
     { "$ref": "#/$defs/derived" },
+    { "$ref": "#/$defs/resource" },
     { "$ref": "#/$defs/state" },
     { "$ref": "#/$defs/transition" },
     { "$ref": "#/$defs/guard" },
@@ -114,6 +115,15 @@
         "kind": { "const": "derived" },
         "type": { "type": "string", "description": "Type-text, e.g. 'bool'." },
         "expr": { "type": "string", "description": "Expression-language text (§6.4), evaluated against this component's own props/fields." }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "dataType"],
+      "properties": {
+        "kind": { "const": "resource" },
+        "dataType": { "type": "string", "description": "Type-text for ONE loaded item, e.g. 'record{email: string}'. The value graph sees this declaration as list<dataType> — 0 elements before load, 1 once loaded." }
       }
     },
     "state": {

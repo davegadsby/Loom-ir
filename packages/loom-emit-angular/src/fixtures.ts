@@ -481,3 +481,34 @@ export function makeEachFixture(): ComponentNode {
     composition: [listUses, itemTemplate],
   });
 }
+
+/**
+ * A `profile-card` with a `profile` resource (`list<record{email:string}>`,
+ * 0-or-1) and a `loaded` derived value (`not isEmpty(profile)`) — proves
+ * `resource` reaches the value graph exactly the way `task-list`'s `tasks`
+ * prop did for `each` (§ Phase 4), just via a distinct declaration kind.
+ * Mirrors `loom-emit-react`'s `makeResourceFixture` exactly.
+ */
+export function makeResourceFixture(): ComponentNode {
+  return makeChildComponent("profile-card", {
+    declarations: [
+      {
+        id: "profile-card/declarations/profile",
+        kind: "resource",
+        origin: "own",
+        assertable: false,
+        name: "profile",
+        dataType: { kind: "record", fields: { email: { kind: "string" } } },
+      },
+      {
+        id: "profile-card/declarations/loaded",
+        kind: "derived",
+        origin: "own",
+        assertable: false,
+        name: "loaded",
+        valueType: { kind: "bool" },
+        expr: parseExpr("not isEmpty(profile)"),
+      },
+    ],
+  });
+}

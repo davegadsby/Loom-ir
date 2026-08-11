@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "loom-expr";
 import { emitAngular } from "./emitAngular.js";
-import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture, makeEachFixture } from "./fixtures.js";
+import { makeFixture, makeStyledFixture, makeCompositionFixture, makeLoginFixture, makeDerivedFixture, makeEachFixture, makeResourceFixture } from "./fixtures.js";
 
 describe("emitAngular", () => {
   it("emits one *.component.ts file per component", () => {
@@ -250,5 +250,25 @@ describe("emitAngular — each (iteration)", () => {
       { key: "a", label: "Buy milk", done: false },
       { key: "b", label: "Walk dog", done: true },
     ]);
+  });
+});
+
+describe("emitAngular — resource (async data as list<T>, 0-or-1)", () => {
+  it("declares the resource as an @Input() Array<dataType>, defaulting to []", () => {
+    const [file] = emitAngular(makeResourceFixture());
+    expect(file!.contents).toContain("@Input() profile: Array<{ email: string }> = [];");
+  });
+
+  it("a derived value's own getter reaches the resource as list<dataType> via isEmpty, exactly like task-list's tasks prop did for each", () => {
+    const [file] = emitAngular(makeResourceFixture());
+    expect(file!.contents).toContain(
+      'return evaluate({"type":"unop","op":"not","expr":{"type":"builtin","name":"isEmpty","args":[{"type":"ref","name":"profile"}]}}, { profile: this.profile }) === true;'
+    );
+  });
+
+  it("the emitted derived value actually evaluates correctly for both the empty and loaded case (proves the emission is sound)", () => {
+    const expr = { type: "unop" as const, op: "not" as const, expr: { type: "builtin" as const, name: "isEmpty" as const, args: [{ type: "ref" as const, name: "profile" }] } };
+    expect(evaluate(expr, { profile: [] })).toBe(false);
+    expect(evaluate(expr, { profile: [{ email: "a@b.co" }] })).toBe(true);
   });
 });

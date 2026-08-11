@@ -1,5 +1,5 @@
 import { typecheck, typeEquals, typeToString, type Expr, type LoomType, type TypecheckContext } from "loom-expr";
-import type { ComponentNode, DerivedNode, EventNode, FieldNode, OnWireTarget, PropNode, PropValue } from "./nodes.js";
+import type { ComponentNode, DerivedNode, EventNode, FieldNode, OnWireTarget, PropNode, PropValue, ResourceNode } from "./nodes.js";
 
 export class CompositionCheckError extends Error {}
 
@@ -35,9 +35,12 @@ export function checkComposition(component: ComponentNode): void {
   const ownFields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
   const ownFieldNames = new Set(ownFields.map((f) => f.name));
   const ownDerived = component.declarations.filter((d): d is DerivedNode => d.kind === "derived");
+  const ownResources = component.declarations.filter((d): d is ResourceNode => d.kind === "resource");
 
   // Env any component-scoped expression typechecks against: own props, plus each declared
-  // field's own current value (string) and derived `<name>Valid` boolean. Used for a
+  // field's own current value (string), derived `<name>Valid` boolean, and each declared
+  // resource's own value graph type — `list<dataType>`, the same "0-or-1 elements" shape
+  // `task-list`'s `tasks` prop already proved end to end (§ Phase 4). Used for a
   // `DerivedNode`'s own `expr` below, and (extended with derived names themselves) for a
   // composed `{ expr }` prop's value further down — but deliberately NOT for `FieldNode.validate`,
   // which stays scoped to only its own field's value (see that check's own context literal).
@@ -45,6 +48,7 @@ export function checkComposition(component: ComponentNode): void {
     props: {
       ...Object.fromEntries(ownProps.map((p) => [p.name, p.valueType])),
       ...Object.fromEntries(ownFields.flatMap((f) => [[f.name, { kind: "string" } as LoomType], [`${f.name}Valid`, { kind: "bool" } as LoomType]])),
+      ...Object.fromEntries(ownResources.map((r) => [r.name, { kind: "list", of: r.dataType } as LoomType])),
     },
   };
 

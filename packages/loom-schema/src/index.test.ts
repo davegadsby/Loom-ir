@@ -119,6 +119,15 @@ describe("validateNodeBlock", () => {
     expect(() => validateNodeBlock({ kind: "derived", expr: "true" })).toThrow(SchemaValidationError);
   });
 
+  it("accepts a valid resource block", () => {
+    const block = validateNodeBlock({ kind: "resource", dataType: "record{email: string}" });
+    expect(block.kind).toBe("resource");
+  });
+
+  it("rejects a resource block missing 'dataType'", () => {
+    expect(() => validateNodeBlock({ kind: "resource" })).toThrow(SchemaValidationError);
+  });
+
   it("accepts slotContent.fields", () => {
     const block = validateNodeBlock({
       kind: "uses",

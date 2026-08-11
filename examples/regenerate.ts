@@ -50,6 +50,7 @@ const components = [
   "list",
   "list-item",
   "task-list",
+  "profile-card",
 ];
 
 const figmaResponse: FigmaVariablesResponse = JSON.parse(

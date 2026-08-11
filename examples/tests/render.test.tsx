@@ -20,6 +20,7 @@ import { LoginDialog } from "../generated/react/LoginDialog";
 import { ConfirmationDialog } from "../generated/react/ConfirmationDialog";
 import { SignupDialog } from "../generated/react/SignupDialog";
 import { TaskList } from "../generated/react/TaskList";
+import { ProfileCard } from "../generated/react/ProfileCard";
 
 afterEach(cleanup);
 
@@ -240,5 +241,17 @@ describe("Button — a real <button> tag for the button a11y pattern (§ Phase 5
     rerender(<Button onPress={() => { pressed = true; }}>Go</Button>);
     fireEvent.click(getByRole("button"));
     expect(pressed).toBe(true);
+  });
+});
+
+describe("ProfileCard — resource: an async value reaches the value graph as list<dataType>, 0-or-1 (§ Phase 5c)", () => {
+  it("mounts with the default (unloaded) resource — an empty array, no fetch mechanism to wait on", () => {
+    const { container } = render(<ProfileCard />);
+    expect(container.querySelector('[data-loom-component="profile-card"]')).not.toBeNull();
+  });
+
+  it("mounts with a consumer-provided, already-loaded resource — proves the emitted derived getter evaluates against a real one-element array without throwing", () => {
+    const { container } = render(<ProfileCard profile={[{ name: "Ada Lovelace", email: "ada@example.com" }]} />);
+    expect(container.querySelector('[data-loom-component="profile-card"]')).not.toBeNull();
   });
 });

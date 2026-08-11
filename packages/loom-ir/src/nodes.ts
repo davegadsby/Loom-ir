@@ -110,7 +110,34 @@ export interface DerivedNode extends LoomNodeEnvelope {
   expr: Expr;
 }
 
-export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode | FieldNode | DerivedNode;
+/**
+ * A named, typed async value the consumer provides as a 0-or-1-element
+ * list — "not yet loaded" is the empty list, "loaded" is one element.
+ * Deliberately `list<dataType>`, never `option<T>`: `list<T>` already
+ * works end to end through the domain grammar/typecheck/evaluate/sampling
+ * machinery (`task-list`'s `tasks` proved it — § Phase 4), while
+ * `option<T>` would need a null literal, option-aware `==`, and narrowing
+ * — real, separate `loom-expr` parser/typecheck/evaluate work that would
+ * also have to reship through `loom-emit-tests`' embedded interpreter.
+ *
+ * This pass gives `resource` the exact runtime shape a plain `list<T>`
+ * prop already has — a consumer-provided `@Input()`/prop defaulting to
+ * `[]`, nothing internally generated or fetched. What makes it a
+ * `resource` and not a `prop` is purely the *kind*: a distinctly-named,
+ * addressable declaration the value graph (a `derived` value, a claim)
+ * can reach as `list<dataType>`, the same mechanism `task-list`'s
+ * `nonempty` already reaches `tasks` through. Actually performing an
+ * async fetch — an `invoke` effect (declared inert in `render.ts` since
+ * `RenderNode` was introduced whole), a loading flag, an error state — is
+ * explicitly out of scope for this pass; see `AGENTS.md`'s Known Gaps.
+ */
+export interface ResourceNode extends LoomNodeEnvelope {
+  kind: "resource";
+  name: string;
+  dataType: LoomType;
+}
+
+export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode | FieldNode | DerivedNode | ResourceNode;
 
 // ---------------------------------------------------------------------------
 // Machine

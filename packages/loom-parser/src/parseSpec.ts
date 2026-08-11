@@ -206,6 +206,13 @@ function buildDeclarationNode(componentSlug: string, block: RawNodeBlock): Decla
         valueType: parseTypeText(yaml.type as string),
         expr: parseExpr(yaml.expr as string),
       };
+    case "resource":
+      return {
+        ...envelope,
+        kind: "resource",
+        name: block.slug,
+        dataType: parseTypeText(yaml.dataType as string),
+      };
     case "method": {
       const rawParams = (yaml.params as Array<{ name: string; type: string }> | undefined) ?? [];
       return {

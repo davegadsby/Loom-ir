@@ -163,3 +163,18 @@ All four are checked in CI (`.github/workflows/ci.yml`).
   specific to `each`/iteration; closing it needs a new `RenderNode`
   variant (something like `{ kind: "text"; value: Expr }` sourced from a
   component's own prop, not a literal), which is separate scope.
+- `ResourceNode` (`kind: "resource"`, `packages/loom-ir/src/nodes.ts`) is
+  runtime-identical to a plain `list<T>` prop — consumer-provided, no
+  fetch/invoke mechanism, no loading/error state. What makes it "a
+  resource" rather than a prop is only the declaration *kind*: the value
+  graph sees it as `list<dataType>` (0 elements before load, 1 once
+  loaded), so a `derived` value or a claim can address it by name and know
+  it represents one loaded item, not an arbitrary collection. Actually
+  performing async I/O — which `Effect` kind triggers a fetch, how the
+  result lands back in this list, how loading/error state is represented
+  — is real, separate scope this pass deliberately didn't take on; `invoke`
+  (the `Effect` kind that would trigger one) has been declared but inert
+  since `RenderNode` was introduced in Phase 1b. See `examples/specs/
+  profile-card.md` for a worked example (a `profile` resource + a `loaded`
+  derived value, proven via both a `property` claim and a `render.test.tsx`
+  mount test).

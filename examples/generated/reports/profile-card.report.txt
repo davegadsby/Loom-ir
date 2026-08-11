@@ -1,0 +1,8 @@
+$ loom report examples/specs/profile-card.md --results examples/loom.results.json
+
+not-applicable component            profile-card
+not-applicable resource             profile-card/declarations/profile
+not-applicable derived              profile-card/declarations/loaded
+unverified     property             profile-card/claims/loaded-mirrors-whether-profile-is-empty
+not-applicable intent               profile-card/prose/intent
+not-applicable rationale            profile-card/prose/rationale

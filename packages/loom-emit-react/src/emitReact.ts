@@ -1,4 +1,4 @@
-import type { ComponentNode, EmittedFile, FieldNode, Handler, PropNode, RenderNode } from "loom-ir";
+import type { ComponentNode, EmittedFile, FieldNode, Handler, PropNode, ResourceNode, RenderNode } from "loom-ir";
 import { lower, lowerComposition, lowerRootHandlers } from "loom-ir";
 import type { Expr, LoomType } from "loom-expr";
 import { partClassName } from "loom-emit-styles";
@@ -18,15 +18,18 @@ import {
 /**
  * `{ propName, fieldName: <name>Value, fieldNameValid: <name>Valid, ... }` —
  * the env any component-scoped `evaluate()` call (a derived value's own
- * expr, or `__env` for composed props) is built from. Prop entries stay
- * shorthand, unquoted (they're already assumed identifier-safe by the props
- * destructuring above this, unrelated to derived values); field entries go
- * through `objectKey` since a field name reaching this object-literal
- * position needs quoting if it isn't already a valid identifier.
+ * expr, or `__env` for composed props) is built from. Prop and resource
+ * entries stay shorthand, unquoted (they're already assumed identifier-safe
+ * by the props destructuring above this, unrelated to derived values) — a
+ * resource is destructured under its own raw name exactly like a prop is,
+ * so it needs no different treatment here; field entries go through
+ * `objectKey` since a field name reaching this object-literal position
+ * needs quoting if it isn't already a valid identifier.
  */
-function valueEnvParts(props: readonly PropNode[], fields: readonly FieldNode[]): string[] {
+function valueEnvParts(props: readonly PropNode[], fields: readonly FieldNode[], resources: readonly ResourceNode[] = []): string[] {
   return [
     ...props.map((p) => p.name),
+    ...resources.map((r) => r.name),
     ...fields.flatMap((f) => [
       `${objectKey(f.name)}: ${camelCase(f.name)}Value`,
       `${objectKey(`${f.name}Valid`)}: ${camelCase(f.name)}Valid`,
@@ -271,6 +274,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   const props = component.declarations.filter((d) => d.kind === "prop");
   const events = component.declarations.filter((d) => d.kind === "event");
   const slots = component.declarations.filter((d) => d.kind === "slot");
+  const resources = component.declarations.filter((d): d is ResourceNode => d.kind === "resource");
   const pattern = component.a11y.find((n) => n.kind === "pattern-conformance");
   const disabledProp = props.find((p) => p.name === "disabled");
   // `VisualConformanceNode` carries no CSS (§ Style scope), so it doesn't count toward "this part is styled."
@@ -304,6 +308,10 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(`  /** ${prop.id} */`);
     lines.push(`  ${prop.name}?: ${loomTypeToTs(prop.valueType)};`);
   }
+  for (const resource of resources) {
+    lines.push(`  /** ${resource.id} */`);
+    lines.push(`  ${resource.name}?: Array<${loomTypeToTs(resource.dataType)}>;`);
+  }
   for (const event of events) {
     lines.push(`  /** ${event.id} */`);
     lines.push(`  on${capitalize(event.name)}?: (payload: ${loomTypeToTs(event.payloadType)}) => void;`);
@@ -316,9 +324,10 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
 
   lines.push(`export function ${componentName}(props: ${componentName}Props): React.ReactElement {`);
   const destructured = props.map((p) => `${p.name} = ${JSON.stringify(p.defaultValue ?? null)}`);
+  const resourceDestructured = resources.map((r) => `${r.name} = []`);
   const eventCallbackNames = events.map((e) => `on${capitalize(e.name)}`);
-  if (destructured.length > 0 || slots.length > 0 || eventCallbackNames.length > 0) {
-    const parts = [...destructured, ...slots.map((s) => slotPropName(s.name)), ...eventCallbackNames];
+  if (destructured.length > 0 || resourceDestructured.length > 0 || slots.length > 0 || eventCallbackNames.length > 0) {
+    const parts = [...destructured, ...resourceDestructured, ...slots.map((s) => slotPropName(s.name)), ...eventCallbackNames];
     lines.push(`  const { ${parts.join(", ")} } = props;`);
   }
 
@@ -347,14 +356,14 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     if (derived.valueType.kind !== "bool") {
       throw new Error(`emitReact: derived '${derived.id}' has unsupported valueType kind '${derived.valueType.kind}' (only 'bool' is supported)`);
     }
-    const envLiteral = `{ ${valueEnvParts(props, fields).join(", ")} }`;
+    const envLiteral = `{ ${valueEnvParts(props, fields, resources).join(", ")} }`;
     lines.push(`  const ${camelCase(derived.name)} = evaluate(${JSON.stringify(derived.expr)}, ${envLiteral}) === true;`);
   }
   if (derivedValues.length > 0) lines.push(``);
 
   if (hasComputedProps(component.composition)) {
     const envParts = [
-      ...valueEnvParts(props, fields),
+      ...valueEnvParts(props, fields, resources),
       ...derivedValues.map((d) => `${objectKey(d.name)}: ${camelCase(d.name)}`),
     ];
     lines.push(`  const __env: any = { ${envParts.join(", ")} };`);

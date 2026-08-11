@@ -461,6 +461,45 @@ expr: "true"
     expect(() => parseSpec(spec)).toThrow(/declared type 'string' does not match its expression's type 'bool'/);
   });
 
+  it("parses a resource block, exposing it to the value graph as list<dataType>", () => {
+    const spec = `---
+name: profile-card
+kind: primitive
+---
+
+## Declarations
+
+### profile
+
+\`\`\`yaml
+kind: resource
+dataType: "record{email: string}"
+\`\`\`
+
+### loaded
+
+\`\`\`yaml
+kind: derived
+type: bool
+expr: "not isEmpty(profile)"
+\`\`\`
+`;
+    const component = parseSpec(spec);
+    const resource = component.declarations.find((d) => d.kind === "resource");
+    expect(resource).toMatchObject({
+      kind: "resource",
+      name: "profile",
+      dataType: { kind: "record", fields: { email: { kind: "string" } } },
+    });
+    expect(resource!.id).toBe("profile-card/declarations/profile");
+
+    // The derived value above only parses at all if `profile` typechecks as list<record{...}>
+    // inside `not isEmpty(profile)` — confirms checkComposition's value-graph wiring, not just
+    // that the resource block itself parses.
+    const loaded = component.declarations.find((d) => d.kind === "derived");
+    expect(loaded).toMatchObject({ kind: "derived", name: "loaded" });
+  });
+
   it("parses a composite spec with {fields} slotContent, an {expr} computed prop, and a multi-target 'on' wire with payload", () => {
     const buttonSpec = `---
 name: button

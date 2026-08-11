@@ -27,6 +27,7 @@ const components = [
   "list",
   "list-item",
   "task-list",
+  "profile-card",
 ];
 
 function assertMatchesCommitted(dir: string, files: readonly EmittedFile[]): void {
