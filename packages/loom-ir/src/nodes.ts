@@ -20,6 +20,12 @@ export interface PropNode extends LoomNodeEnvelope {
   name: string;
   valueType: LoomType;
   defaultValue?: LoomValue;
+  /** When true, this prop's value is rendered as this component's own text
+   * content (lower()'s non-composition path) instead of only being threaded
+   * through as data — closes the "a primitive can't render its own prop as
+   * displayed content" gap. Restricted to a string-typed prop with no
+   * declared "default" slot on the same component (checkComposition). */
+  content?: boolean;
 }
 
 export interface EventNode extends LoomNodeEnvelope {

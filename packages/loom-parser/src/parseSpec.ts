@@ -176,6 +176,7 @@ function buildDeclarationNode(componentSlug: string, block: RawNodeBlock): Decla
         name: block.slug,
         valueType: parseTypeText(yaml.type as string),
         defaultValue: yaml.default as never,
+        content: yaml.content as boolean | undefined,
       };
     case "event":
       return {

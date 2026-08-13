@@ -44,6 +44,37 @@ describe("lower — non-composition slots", () => {
   });
 });
 
+describe("lower — content prop (renders a prop as own text content)", () => {
+  it("lowers a content prop to a single text render node, a bare ref to the prop", () => {
+    const component = makeChildComponent("radio-button", {
+      declarations: [
+        { id: "radio-button/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" }, content: true },
+      ],
+    });
+    expect(lower(component)).toEqual([{ kind: "text", value: { type: "ref", name: "label" } }]);
+  });
+
+  it("ignores declared slots when a content prop is present (checkComposition guarantees they never coexist)", () => {
+    const component = makeChildComponent("weird", {
+      declarations: [
+        { id: "weird/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" }, content: true },
+        { id: "weird/declarations/aside", kind: "slot", origin: "own", assertable: false, name: "aside" },
+      ],
+    });
+    expect(lower(component)).toEqual([{ kind: "text", value: { type: "ref", name: "label" } }]);
+  });
+
+  it("falls back to declared slots when no prop is marked content", () => {
+    const component = makeChildComponent("plain", {
+      declarations: [
+        { id: "plain/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" } },
+        { id: "plain/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" },
+      ],
+    });
+    expect(lower(component)).toEqual([{ kind: "slot", name: "default" }]);
+  });
+});
+
 function makeChildComponent(name: string, overrides: Partial<ComponentNode> = {}): ComponentNode {
   return {
     id: name,

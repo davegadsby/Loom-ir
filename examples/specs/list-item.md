@@ -21,17 +21,21 @@ focusable element; `label`/`done` are display-only props.
 kind: prop
 type: string
 default: ""
+content: true
 ```
 
-The item's own display text. Given a default rather than left required —
-a real, newly-discovered gap, not stylistic preference: `emitAngular`
-prints every `PropNode` as `@Input() name: T = <default ?? null>;`
-unconditionally, and `null` isn't assignable to a non-optional `T` like
-`string` under `strictNullChecks` — every prior example spec happens to
-give every prop a default already, so nothing exercised this before.
-Tracked as a known gap (`AGENTS.md`), not fixed here — fixing it means
-picking a real policy (definite-assignment `!`, a nullable type, a
-required-input diagnostic) `list-item` alone shouldn't decide.
+The item's own display text, rendered as this component's own text
+content (`content: true` — closes the previously-documented "a primitive
+can't render its own prop as displayed content" gap; see `AGENTS.md`).
+Given a default rather than left required — a real, newly-discovered gap,
+not stylistic preference: `emitAngular` prints every `PropNode` as
+`@Input() name: T = <default ?? null>;` unconditionally, and `null` isn't
+assignable to a non-optional `T` like `string` under `strictNullChecks` —
+every prior example spec happens to give every prop a default already, so
+nothing exercised this before. Tracked as a known gap (`AGENTS.md`), not
+fixed here — fixing it means picking a real policy (definite-assignment
+`!`, a nullable type, a required-input diagnostic) `list-item` alone
+shouldn't decide.
 
 ### done
 

@@ -23,9 +23,10 @@
  * `examples/material/` is a second, independent example set (Angular
  * Material-replica specs, kept deliberately separate from the root set so
  * the two experiments don't mix) — it shares this same
- * compile/emit/write-files logic via `regenerateComponentSet` below, but
- * has no Style section on any of its specs yet, so it skips the
- * figma/tokens/reports steps entirely.
+ * compile/emit/write-files logic via `regenerateComponentSet` below,
+ * including per-component Style/CSS emission, but skips the
+ * figma/tokens/reports steps entirely (it reuses the root set's own
+ * committed `tokens.css` custom properties rather than importing its own).
  */
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";

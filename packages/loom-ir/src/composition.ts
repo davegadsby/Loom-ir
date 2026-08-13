@@ -105,6 +105,26 @@ export function checkComposition(component: ComponentNode): void {
     }
   }
 
+  // A "content" prop renders as this component's own text content (lower.ts) instead of only
+  // being threaded through as data — cross-declaration, not per-declaration, since it has to
+  // compare against every other prop and every declared slot, not just itself.
+  const contentProps = ownProps.filter((p) => p.content === true);
+  if (contentProps.length > 1) {
+    throw new CompositionCheckError(
+      `component '${component.id}' has more than one prop marked content (${contentProps.map((p) => p.name).join(", ")})`
+    );
+  }
+  if (contentProps.length === 1 && contentProps[0]!.valueType.kind !== "string") {
+    throw new CompositionCheckError(
+      `prop '${contentProps[0]!.id}' is marked content but is not string-typed (got '${typeToString(contentProps[0]!.valueType)}')`
+    );
+  }
+  if (contentProps.length === 1 && component.declarations.some((d) => d.kind === "slot" && d.name === "default")) {
+    throw new CompositionCheckError(
+      `component '${component.id}' has a content prop ('${contentProps[0]!.name}') and a declared default slot — ambiguous which renders`
+    );
+  }
+
   // Both backends can only bind one `keydown` handler on a root element, so at most one
   // distinct key may be wired across this component's own declared-event triggers —
   // `lowerRootHandlers` groups by (DOM name, key), which would otherwise silently produce

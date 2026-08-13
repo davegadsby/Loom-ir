@@ -4,7 +4,7 @@ import { Component, EventEmitter, Input, Output } from "@angular/core";
 @Component({
   selector: "loom-list-item",
   standalone: true,
-  template: `<div [attr.data-loom-component]="'list-item'" [attr.role]="'listitem'"></div>`,
+  template: `<div [attr.data-loom-component]="'list-item'" [attr.role]="'listitem'">{{ label }}</div>`,
 })
 export class ListItemComponent {
   /** list-item/declarations/label */

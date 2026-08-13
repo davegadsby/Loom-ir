@@ -63,9 +63,9 @@ function assertMatchesCommitted(dir: string, files: readonly EmittedFile[]): voi
  * are illustrative rather than something this test re-derives — and which
  * only exist for the root set (§ regenerate.ts).
  *
- * `includeStyles` is root-set-only: the material set's specs declare no
- * Style sections yet, so it has no `generated/styles/` directory at all —
- * including it there would `readdirSync` a directory that doesn't exist.
+ * `includeStyles` is off by default so a set with no Style sections at all
+ * doesn't `readdirSync` a `generated/styles/` directory that was never
+ * created — pass `{ includeStyles: true }` once a set's specs declare any.
  */
 function describeExampleSet(
   label: string,
@@ -149,5 +149,5 @@ describe("examples/generated is up to date with the compiler", () => {
 });
 
 describe("examples/material/generated is up to date with the compiler", () => {
-  describeExampleSet("material set", materialSpecsDir, materialGeneratedDir, materialComponents);
+  describeExampleSet("material set", materialSpecsDir, materialGeneratedDir, materialComponents, { includeStyles: true });
 });

@@ -4,7 +4,8 @@ import { Component, EventEmitter, Input, Output } from "@angular/core";
 @Component({
   selector: "loom-list",
   standalone: true,
-  template: `<div [attr.data-loom-component]="'list'" [attr.role]="'list'"><ng-content></ng-content></div>`,
+  template: `<div [attr.data-loom-component]="'list'" class="loom-list" [attr.role]="'list'"><ng-content></ng-content></div>`,
+  styleUrls: ["../styles/List.css"],
 })
 export class ListComponent {
 }

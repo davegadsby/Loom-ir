@@ -7,7 +7,8 @@ import { RadioButtonComponent } from "./RadioButton.component";
   selector: "loom-radio-group",
   standalone: true,
   imports: [ListComponent, RadioButtonComponent],
-  template: `<div [attr.data-loom-component]="'radio-group'" [attr.role]="'radiogroup'"><loom-list><loom-radio-button *ngFor="let option of options; trackBy: trackByOption" [value]="radioButtonTemplateValue(option)" [label]="radioButtonTemplateLabel(option)" [checked]="radioButtonTemplateChecked(option)" (press)="optionSelected.emit({ value: option.value, label: option.label }); selected = option.value"></loom-radio-button></loom-list></div>`,
+  template: `<div [attr.data-loom-component]="'radio-group'" class="loom-radio-group" [attr.role]="'radiogroup'"><loom-list><loom-radio-button *ngFor="let option of options; trackBy: trackByOption" [value]="radioButtonTemplateValue(option)" [label]="radioButtonTemplateLabel(option)" [checked]="radioButtonTemplateChecked(option)" (press)="optionSelected.emit({ value: option.value, label: option.label }); selected = option.value"></loom-radio-button></loom-list></div>`,
+  styleUrls: ["../styles/RadioGroup.css"],
 })
 export class RadioGroupComponent {
   /** radio-group/declarations/options */

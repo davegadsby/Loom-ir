@@ -15,6 +15,7 @@ export function ListItem(props: ListItemProps): React.ReactElement {
       data-loom-component="list-item"
       role="listitem"
     >
+      {label}
     </div>
   );
 }

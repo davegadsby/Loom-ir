@@ -612,6 +612,21 @@ export function makeCheckedPropFixture(): ComponentNode {
 }
 
 /**
+ * A `list-item`-shaped primitive whose `label` prop is marked `content:
+ * true` — renders as this component's own text content instead of only
+ * being threaded through as data. No slots at all, matching both real
+ * instances of this gap (`list-item.md`, `radio-button.md`).
+ */
+export function makeContentPropFixture(): ComponentNode {
+  return makeChildComponent("list-item", {
+    declarations: [
+      { id: "list-item/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" }, defaultValue: "", content: true },
+      { id: "list-item/declarations/done", kind: "prop", origin: "own", assertable: false, name: "done", valueType: { kind: "bool" }, defaultValue: false },
+    ],
+  });
+}
+
+/**
  * A machine-less `button`-shaped component whose one declared event fires
  * directly off a `click` trigger — no `states`/`transitions` at all, the
  * shape that used to never get a click handler wired up regardless of what

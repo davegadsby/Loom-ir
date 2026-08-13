@@ -1,5 +1,5 @@
 import type { Expr, LoomValue } from "loom-expr";
-import type { ComponentNode, FieldNode, OnWireTarget, PropValue, UsesNode } from "./nodes.js";
+import type { ComponentNode, FieldNode, OnWireTarget, PropNode, PropValue, UsesNode } from "./nodes.js";
 import type { Attr, Effect, Handler, RenderNode } from "./render.js";
 
 type EmitPayload = Extract<Effect, { kind: "emit" }>["payload"];
@@ -15,8 +15,15 @@ type EmitPayload = Extract<Effect, { kind: "emit" }>["payload"];
  * instead — callers still branch on `component.composition` themselves,
  * mirroring the branch both emitters already had before either function
  * existed.
+ *
+ * A `content` prop (`PropNode.content === true`) renders as this
+ * component's own text content instead of its declared slots —
+ * `checkComposition` guarantees the two never coexist, so this is a
+ * plain either/or, not a merge.
  */
 export function lower(component: ComponentNode): RenderNode[] {
+  const contentProp = component.declarations.find((d): d is PropNode => d.kind === "prop" && d.content === true);
+  if (contentProp) return [{ kind: "text", value: { type: "ref", name: contentProp.name } }];
   return component.declarations
     .filter((d) => d.kind === "slot")
     .map((slot): RenderNode => ({ kind: "slot", name: slot.name }));

@@ -4,7 +4,8 @@ import { Component, EventEmitter, Input, Output } from "@angular/core";
 @Component({
   selector: "loom-card",
   standalone: true,
-  template: `<div [attr.data-loom-component]="'card'"><ng-content select="[slot=header]"></ng-content><ng-content select="[slot=content]"></ng-content><ng-content select="[slot=actions]"></ng-content></div>`,
+  template: `<div [attr.data-loom-component]="'card'" class="loom-card"><ng-content select="[slot=header]"></ng-content><ng-content select="[slot=content]"></ng-content><ng-content select="[slot=actions]"></ng-content></div>`,
+  styleUrls: ["../styles/Card.css"],
 })
 export class CardComponent {
 }

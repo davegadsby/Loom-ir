@@ -47,7 +47,8 @@
       "properties": {
         "kind": { "const": "prop" },
         "type": { "type": "string", "description": "Type-text, e.g. 'bool', 'list<string>'." },
-        "default": {}
+        "default": {},
+        "content": { "type": "boolean", "description": "Renders this prop's value as this component's own text content. Restricted to a string-typed prop with no declared 'default' slot on the same component." }
       }
     },
     "event": {

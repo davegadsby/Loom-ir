@@ -930,6 +930,47 @@ describe("checkComposition", () => {
     });
   });
 
+  describe("content prop (renders a prop as this component's own text content)", () => {
+    const stringContentProp: PropNode = {
+      id: "widget/declarations/label",
+      kind: "prop",
+      origin: "own",
+      assertable: false,
+      name: "label",
+      valueType: { kind: "string" },
+      content: true,
+    };
+
+    it("accepts a single string-typed content prop with no default slot", () => {
+      const widget = makeWidget({ declarations: [stringContentProp] });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("throws when more than one prop is marked content", () => {
+      const second: PropNode = { ...stringContentProp, id: "widget/declarations/label2", name: "label2" };
+      const widget = makeWidget({ declarations: [stringContentProp, second] });
+      expect(() => checkComposition(widget)).toThrow(/more than one prop marked content/);
+    });
+
+    it("throws when a content prop is not string-typed", () => {
+      const boolContentProp: PropNode = { ...stringContentProp, valueType: { kind: "bool" } };
+      const widget = makeWidget({ declarations: [boolContentProp] });
+      expect(() => checkComposition(widget)).toThrow(/is marked content but is not string-typed/);
+    });
+
+    it("throws when a content prop coexists with a declared default slot", () => {
+      const defaultSlot: SlotNode = { id: "widget/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" };
+      const widget = makeWidget({ declarations: [stringContentProp, defaultSlot] });
+      expect(() => checkComposition(widget)).toThrow(/ambiguous which renders/);
+    });
+
+    it("does not throw for a non-default slot alongside a content prop", () => {
+      const namedSlot: SlotNode = { id: "widget/declarations/aside", kind: "slot", origin: "own", assertable: false, name: "aside" };
+      const widget = makeWidget({ declarations: [stringContentProp, namedSlot] });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+  });
+
   describe("resource", () => {
     const profileResource: ResourceNode = {
       id: "widget/declarations/profile",

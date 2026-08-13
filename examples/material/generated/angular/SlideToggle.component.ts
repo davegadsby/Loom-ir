@@ -28,7 +28,8 @@ const __machine = new LoomMachine({
 @Component({
   selector: "loom-slide-toggle",
   standalone: true,
-  template: `<input [attr.data-loom-component]="'slide-toggle'" type="checkbox" [checked]="state === 'checked'" [disabled]="disabled" (change)="dispatch('click')" />`,
+  template: `<input [attr.data-loom-component]="'slide-toggle'" class="loom-slide-toggle" type="checkbox" [checked]="state === 'checked'" [disabled]="disabled" (change)="dispatch('click')" />`,
+  styleUrls: ["../styles/SlideToggle.css"],
 })
 export class SlideToggleComponent implements OnInit {
   /** interactive-base/declarations/disabled */

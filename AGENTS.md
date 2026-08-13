@@ -162,18 +162,23 @@ All four are checked in CI (`.github/workflows/ci.yml`).
   `label` does, with a comment explaining why) — fixing the emitter means
   first picking a real policy (definite-assignment `!`, a nullable type, a
   required-input diagnostic), not something one example spec should decide.
-- A primitive component has no way to render one of its own prop's values
-  as displayed content — only a *composed child's* `{expr}` prop can
-  reference a value computed at render time; a primitive's own `lower()`
-  path only ever produces `slot` render nodes from its own declared
-  `SlotNode`s (`packages/loom-ir/src/lower.ts`). `list-item.md`'s `label`/
-  `done` props are real, typed, and correctly threaded end to end (proven
-  by unit tests evaluating the generated `{expr}` code directly), but
-  never show up in `ListItem`'s own rendered DOM — there's currently no
-  render-tree construct for "show my own prop here." A real gap, not
-  specific to `each`/iteration; closing it needs a new `RenderNode`
-  variant (something like `{ kind: "text"; value: Expr }` sourced from a
-  component's own prop, not a literal), which is separate scope.
+- Fixed: a primitive component used to have no way to render one of its
+  own prop's values as displayed content — only a *composed child's*
+  `{expr}` prop could reference a value computed at render time; a
+  primitive's own `lower()` path only ever produced `slot` render nodes
+  from its own declared `SlotNode`s. `PropNode.content?: boolean`
+  (`packages/loom-ir/src/nodes.ts`) now marks a string-typed prop as
+  rendering as the component's own text content; `lower()`
+  (`packages/loom-ir/src/lower.ts`) emits a single
+  `{ kind: "text"; value: { type: "ref", name } }` render node for it
+  instead of the usual slot nodes, and both emitters' `printRenderNodes`
+  print it directly (`{label}` in React, `{{ label }}` in Angular).
+  Restricted by `checkComposition` to at most one `content` prop per
+  component, string-typed, with no declared `default` slot on the same
+  component (composition-level ambiguity would otherwise exist between
+  the two). `list-item.md`'s and `radio-button.md`'s `label` props both
+  use it — real, visible text in the generated DOM now, not just threaded
+  through as inert data.
 - `ResourceNode` (`kind: "resource"`, `packages/loom-ir/src/nodes.ts`) is
   runtime-identical to a plain `list<T>` prop — consumer-provided, no
   fetch/invoke mechanism, no loading/error state. What makes it "a

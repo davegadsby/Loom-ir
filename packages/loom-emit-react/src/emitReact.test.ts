@@ -14,6 +14,7 @@ import {
   makeCheckboxPatternFixture,
   makeSelectionFixture,
   makeCheckedPropFixture,
+  makeContentPropFixture,
 } from "./fixtures.js";
 
 describe("emitReact", () => {
@@ -251,6 +252,18 @@ describe("emitReact — selection (shared mutual-exclusive state across each sib
     const [file] = emitReact(makeCheckedPropFixture());
     expect(file!.contents).toContain("aria-checked={checked}");
     expect(file!.contents).toContain('role="radio"');
+  });
+});
+
+describe("emitReact — content prop (renders a prop as own text content)", () => {
+  it("prints the destructured prop directly as a JSX child, no wrapper element", () => {
+    const [file] = emitReact(makeContentPropFixture());
+    expect(file!.contents).toContain(">\n      {label}\n    </div>");
+  });
+
+  it("does not render a data-loom-slot wrapper the way a real slot would", () => {
+    const [file] = emitReact(makeContentPropFixture());
+    expect(file!.contents).not.toContain("data-loom-slot");
   });
 });
 

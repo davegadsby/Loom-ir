@@ -46,3 +46,32 @@ pattern: list
 ```
 
 Conforms to the WAI-ARIA APG list pattern.
+
+## Style
+
+### root-background
+
+```yaml
+kind: token-ref
+part: root
+property: background-color
+token: color.surface.default
+```
+
+The same design-token binding `checkbox.md` (in the root example set)
+already proves.
+
+### root-layout
+
+```yaml
+kind: layout-intent
+part: root
+display: flex
+direction: column
+align: stretch
+gapToken: spacing.sm
+```
+
+Stacks its `default`-slotted items top-to-bottom with the design's
+standard small gap — a passive container's own layout, not an
+interactive control's row (contrast `checkbox.md`/`radio-button.md`).

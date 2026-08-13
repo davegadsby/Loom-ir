@@ -13,6 +13,7 @@ import {
   makeCheckboxPatternFixture,
   makeSelectionFixture,
   makeCheckedPropFixture,
+  makeContentPropFixture,
 } from "./fixtures.js";
 
 describe("emitAngular", () => {
@@ -251,6 +252,14 @@ describe("emitAngular — selection (shared mutual-exclusive state across each s
     const [file] = emitAngular(makeCheckedPropFixture());
     expect(file!.contents).toContain('[attr.aria-checked]="checked"');
     expect(file!.contents).toContain(`[attr.role]="'radio'"`);
+  });
+});
+
+describe("emitAngular — content prop (renders a prop as own text content)", () => {
+  it("prints a plain {{ label }} interpolation, no ng-content projection", () => {
+    const [file] = emitAngular(makeContentPropFixture());
+    expect(file!.contents).toContain(">{{ label }}</div>");
+    expect(file!.contents).not.toContain("ng-content");
   });
 });
 

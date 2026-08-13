@@ -149,3 +149,31 @@ this component's `role="radiogroup"` — a deliberate trade for reusing
 the `each`-over-a-list-prop container `task-list.md` already proved,
 rather than inventing a bespoke, non-semantic wrapper element just for
 this component.
+
+## Style
+
+### root-background
+
+```yaml
+kind: token-ref
+part: root
+property: background-color
+token: color.surface.default
+```
+
+The same design-token binding `checkbox.md` (in the root example set)
+already proves.
+
+### root-layout
+
+```yaml
+kind: layout-intent
+part: root
+display: flex
+direction: row
+align: center
+gapToken: spacing.sm
+```
+
+Lays the group's options out as a row with the design's standard small
+gap — the same minimal flex intent `checkbox.md` uses.
