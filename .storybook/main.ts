@@ -15,6 +15,16 @@ const config: StorybookConfig = {
     name: "@storybook/react-vite",
     options: {},
   },
+  // A GitHub Pages project site is served under /<repo>/, not /, so asset
+  // URLs baked in at build time need a matching base. Gated on the env var
+  // so the local dev server and `storybook:test:ci` (served at the root of
+  // localhost:6006) are unaffected — neither sets it.
+  viteFinal: async (viteConfig) => {
+    if (process.env.STORYBOOK_BASE_PATH) {
+      viteConfig.base = process.env.STORYBOOK_BASE_PATH;
+    }
+    return viteConfig;
+  },
 };
 
 export default config;
