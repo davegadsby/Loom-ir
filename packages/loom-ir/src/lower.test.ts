@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { lower, lowerComposition, lowerRootHandlers, hasKeydownHandler } from "./lower.js";
 import { makeCheckboxFixture } from "./testFixtures.js";
 import type { ComponentNode, EventNode, FieldNode, SlotNode, UsesNode } from "./nodes.js";
-import type { RenderNode } from "./render.js";
+import type { Effect, RenderNode } from "./render.js";
 
 function withSlots(...names: string[]): ComponentNode {
   const component = makeCheckboxFixture();
@@ -325,6 +325,101 @@ describe("lowerComposition — each (iteration)", () => {
     expect(each.body[0]).toMatchObject({ kind: "instance", name: "item-template" });
     if (each.body[0]!.kind !== "instance") throw new Error("unreachable");
     expect(each.body[0]!.props.label).toEqual({ type: "member", target: { type: "ref", name: "task" }, property: "label" });
+  });
+});
+
+describe("lowerComposition — each.selects (shared selection)", () => {
+  const radioButton = makeChildComponent("radio-button", {
+    declarations: [
+      { id: "radio-button/declarations/value", kind: "prop", origin: "own", assertable: false, name: "value", valueType: { kind: "string" } },
+      {
+        id: "radio-button/declarations/press",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "press",
+        payloadType: { kind: "record", fields: {} },
+      },
+    ],
+  });
+  const list = makeChildComponent("list", {
+    declarations: [{ id: "list/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" }],
+  });
+
+  function makeRadioGroup(templateOn: UsesNode["on"]): { component: ComponentNode; listUses: UsesNode } {
+    const template: UsesNode = {
+      id: "radio-group/composition/option-template",
+      kind: "uses",
+      origin: "own",
+      assertable: false,
+      name: "option-template",
+      component: "radio-button",
+      resolvedComponent: radioButton,
+      on: templateOn,
+    };
+    const listUses: UsesNode = {
+      id: "radio-group/composition/list-instance",
+      kind: "uses",
+      origin: "own",
+      assertable: false,
+      name: "list-instance",
+      component: "list",
+      resolvedComponent: list,
+      root: true,
+      slotContent: {
+        default: { each: { over: "options", as: "option", use: "option-template", selects: { on: "press", selection: "selected", field: "value" } } },
+      },
+    };
+    const component = makeChildComponent("radio-group", { composition: [listUses, template] });
+    return { component, listUses };
+  }
+
+  function lowerTemplateInstance(component: ComponentNode, listUses: UsesNode): Extract<RenderNode, { kind: "instance" }> {
+    const tree = lowerComposition(listUses, component);
+    if (tree.kind !== "instance") throw new Error("unreachable");
+    const each = tree.fills.default![0] as Extract<RenderNode, { kind: "each" }>;
+    const template = each.body[0]!;
+    if (template.kind !== "instance") throw new Error("unreachable");
+    return template;
+  }
+
+  it("merges a set-cell effect into the same Handler the template's own 'on' wiring already produces for that event", () => {
+    const { component, listUses } = makeRadioGroup({ press: { event: "option-selected", payload: {} } });
+    const template = lowerTemplateInstance(component, listUses);
+    expect(template.handlers).toHaveLength(1);
+    expect(template.handlers[0]!.on).toBe("press");
+    expect(template.handlers[0]!.effects).toEqual([
+      { kind: "emit", event: "option-selected", payload: {} },
+      {
+        kind: "set-cell",
+        cell: "selected",
+        from: { kind: "expr", expr: { type: "member", target: { type: "ref", name: "option" }, property: "value" } },
+      },
+    ]);
+  });
+
+  it("adds a new one-effect Handler when the template declares no 'on' wiring for that event at all", () => {
+    const { component, listUses } = makeRadioGroup(undefined);
+    const template = lowerTemplateInstance(component, listUses);
+    expect(template.handlers).toEqual([
+      {
+        on: "press",
+        effects: [
+          {
+            kind: "set-cell",
+            cell: "selected",
+            from: { kind: "expr", expr: { type: "member", target: { type: "ref", name: "option" }, property: "value" } },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("lowers a dotted on-payload source (<as>.<field>) to a member expr over the bound ident", () => {
+    const { component, listUses } = makeRadioGroup({ press: { event: "option-selected", payload: { value: "option.value" } } });
+    const template = lowerTemplateInstance(component, listUses);
+    const emitEffect = template.handlers[0]!.effects[0]! as Extract<Effect, { kind: "emit" }>;
+    expect(emitEffect.payload.value).toEqual({ type: "member", target: { type: "ref", name: "option" }, property: "value" });
   });
 });
 

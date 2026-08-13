@@ -1,4 +1,4 @@
-import type { ComponentNode, DerivedNode, EmittedFile, FieldNode, Handler, PropNode, ResourceNode, RenderNode } from "loom-ir";
+import type { ComponentNode, DerivedNode, EmittedFile, FieldNode, Handler, PropNode, ResourceNode, RenderNode, SelectionNode } from "loom-ir";
 import { lower, lowerComposition, lowerRootHandlers, hasKeydownHandler } from "loom-ir";
 import type { Expr } from "loom-expr";
 import { partClassName } from "loom-emit-styles";
@@ -22,13 +22,16 @@ import {
  * `boundIdents` (an `each`'s own loop variable(s), innermost last) resolve
  * to themselves — already in scope as an ordinary closure parameter by the
  * time a template instance's `{expr}` prop references one, no different
- * from a destructured prop.
+ * from a destructured prop. A `SelectionNode` resolves to its own bare
+ * `useState` variable — mutable, unlike a `derived` value's getter-shaped
+ * reference, but resolved the same "just a local variable name" way.
  */
 function buildRefResolver(
   props: readonly PropNode[],
   fields: readonly FieldNode[],
   resources: readonly ResourceNode[] = [],
   derivedValues: readonly DerivedNode[] = [],
+  selections: readonly SelectionNode[] = [],
   boundIdents: readonly string[] = []
 ): RefResolver {
   const map = new Map<string, string>();
@@ -40,6 +43,7 @@ function buildRefResolver(
     map.set(`${f.name}Valid`, `${c}Valid`);
   }
   for (const d of derivedValues) map.set(d.name, camelCase(d.name));
+  for (const s of selections) map.set(s.name, camelCase(s.name));
   for (const b of boundIdents) map.set(b, b);
   return (name) => {
     const resolved = map.get(name);
@@ -107,13 +111,18 @@ function printPropExpr(expr: Expr, resolveRef: RefResolver, boundIdents: readonl
 /**
  * A field-sourced payload value carries a `Value` suffix (React's field
  * state variable is named `<name>Value`); a prop-sourced one prints as-is.
+ * A `member` expr (an `each`-bound item's own field, e.g. `option.value` —
+ * the only shape `lowerOnWiring` ever builds one for) prints via
+ * `printBareRef` instead, since it's already a plain, already-scoped JS
+ * reference, not something needing the field-name lookup at all.
  */
 function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "emit" }>, fieldsByName: ReadonlyMap<string, FieldNode>): string {
   const payloadEntries = Object.entries(effect.payload).map(([k, expr]) => {
+    if (expr.type === "member") return `${k}: ${printBareRef(expr)}`;
     const source = (expr as Extract<Expr, { type: "ref" }>).name;
     return `${k}: ${fieldsByName.has(source) ? `${camelCase(source)}Value` : source}`;
   });
-  return `on${capitalize(effect.event)}?.({ ${payloadEntries.join(", ")} });`;
+  return `on${capitalize(camelCase(effect.event))}?.({ ${payloadEntries.join(", ")} });`;
 }
 
 /**
@@ -121,10 +130,19 @@ function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "em
  * `emitReact`'s main function defines whenever the component has a
  * machine — always in scope by the time a `dispatch` effect can exist,
  * since `lowerRootHandlers` only ever produces one from an actual
- * `TransitionNode.trigger`.
+ * `TransitionNode.trigger`. `set-cell`'s own setter (`set<Selection>`) is
+ * always in scope by the time this effect can exist too — it's only ever
+ * produced by an `each.selects` wiring, and every `SelectionNode`'s
+ * `useState` pair is emitted unconditionally whenever one is declared.
  */
 function printEffect(effect: Handler["effects"][number], fieldsByName: ReadonlyMap<string, FieldNode>): string {
   if (effect.kind === "dispatch") return `dispatch(${JSON.stringify(effect.event)});`;
+  if (effect.kind === "set-cell") {
+    if (effect.from.kind !== "expr") {
+      throw new Error(`printEffect: set-cell 'from' kind '${effect.from.kind}' is unsupported by this backend`);
+    }
+    return `set${capitalize(camelCase(effect.cell))}(${printBareRef(effect.from.expr)});`;
+  }
   if (effect.kind !== "emit") throw new Error(`printEffect: unsupported effect kind '${effect.kind}'`);
   return printEmitEffect(effect, fieldsByName);
 }
@@ -134,10 +152,18 @@ function reactEventPropName(domEventName: string): string {
   return domEventName === "keydown" ? "keyDown" : domEventName;
 }
 
+/**
+ * `h.on` is either a literal DOM trigger name (root handlers, from
+ * `lowerRootHandlers` — always a single lowercase word already, `"keydown"`
+ * handled above) or a composed child's own declared event name (instance
+ * handlers, from `lowerOnWiring`'s `on` keys) — which, like any declared
+ * name, may be kebab-case. `camelCase` is a no-op on the former and fixes
+ * the latter, so it's always safe to apply before `capitalize`.
+ */
 function printHandlers(handlers: readonly Handler[], fieldsByName: ReadonlyMap<string, FieldNode>): string[] {
   return handlers.map((h) => {
     const calls = h.effects.map((e) => printEffect(e, fieldsByName));
-    const propName = `on${capitalize(reactEventPropName(h.on))}`;
+    const propName = `on${capitalize(camelCase(reactEventPropName(h.on)))}`;
     if (h.key !== undefined) {
       return `${propName}={(e) => { if (e.key === ${JSON.stringify(h.key)}) { ${calls.join(" ")} } }}`;
     }
@@ -304,6 +330,8 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   const resources = component.declarations.filter((d): d is ResourceNode => d.kind === "resource");
   const pattern = component.a11y.find((n) => n.kind === "pattern-conformance");
   const disabledProp = props.find((p) => p.name === "disabled");
+  const checkedProp = props.find((p) => p.name === "checked");
+  const selections = component.declarations.filter((d): d is SelectionNode => d.kind === "selection");
   // `VisualConformanceNode` carries no CSS (§ Style scope), so it doesn't count toward "this part is styled."
   const styledParts = new Set(component.style.filter((n) => n.kind !== "visual-conformance").map((n) => n.part));
   const rootUses = component.composition.find((n) => n.root);
@@ -342,7 +370,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   }
   for (const event of events) {
     lines.push(`  /** ${event.id} */`);
-    lines.push(`  on${capitalize(event.name)}?: (payload: ${loomTypeToTs(event.payloadType)}) => void;`);
+    lines.push(`  on${capitalize(camelCase(event.name))}?: (payload: ${loomTypeToTs(event.payloadType)}) => void;`);
   }
   for (const slot of slots) {
     lines.push(`  /** ${slot.id} */`);
@@ -353,7 +381,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   lines.push(`export function ${componentName}(props: ${componentName}Props): React.ReactElement {`);
   const destructured = props.map((p) => `${p.name} = ${JSON.stringify(p.defaultValue ?? null)}`);
   const resourceDestructured = resources.map((r) => `${r.name} = []`);
-  const eventCallbackNames = events.map((e) => `on${capitalize(e.name)}`);
+  const eventCallbackNames = events.map((e) => `on${capitalize(camelCase(e.name))}`);
   if (destructured.length > 0 || resourceDestructured.length > 0 || slots.length > 0 || eventCallbackNames.length > 0) {
     const parts = [...destructured, ...resourceDestructured, ...slots.map((s) => slotPropName(s.name)), ...eventCallbackNames];
     lines.push(`  const { ${parts.join(", ")} } = props;`);
@@ -380,25 +408,37 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
   }
   if (fields.length > 0) lines.push(``);
 
+  // Local, mutable, parent-owned state — not consumer-provided (unlike a prop) and not
+  // recomputed from anything else (unlike `derived`). Any one `each`-templated sibling's own
+  // `set-cell` effect (below) can overwrite it; every sibling reading it for its own "am I
+  // selected" comparison is what makes them mutually exclusive.
+  for (const selection of selections) {
+    const camel = camelCase(selection.name);
+    lines.push(
+      `  const [${camel}, set${capitalize(camel)}] = React.useState<${loomTypeToTs(selection.valueType)}>(${JSON.stringify(selection.initialValue)});`
+    );
+  }
+  if (selections.length > 0) lines.push(``);
+
   // A derived value's own expr is checked (composition.ts) against only this component's own
-  // props/fields — never another derived value — so it resolves against a narrower resolver
-  // than a composed prop's, the same convention FieldNode.validate already uses. Only `bool` is
-  // supported for now; nothing yet needs another valueType kind.
+  // props/fields/selections — never another derived value — so it resolves against a narrower
+  // resolver than a composed prop's, the same convention FieldNode.validate already uses. Only
+  // `bool` is supported for now; nothing yet needs another valueType kind.
   for (const derived of derivedValues) {
     if (derived.valueType.kind !== "bool") {
       throw new Error(`emitReact: derived '${derived.id}' has unsupported valueType kind '${derived.valueType.kind}' (only 'bool' is supported)`);
     }
-    const resolveRef = buildRefResolver(props, fields, resources);
+    const resolveRef = buildRefResolver(props, fields, resources, [], selections);
     lines.push(`  const ${camelCase(derived.name)} = ${compileExprToJs(derived.expr, resolveRef)};`);
   }
   if (derivedValues.length > 0) lines.push(``);
 
-  const resolveRef = buildRefResolver(props, fields, resources, derivedValues);
+  const resolveRef = buildRefResolver(props, fields, resources, derivedValues, selections);
 
   for (const event of events) {
     if (!event.firesWhen) continue;
     const { prop: watchedProp, becomes } = event.firesWhen;
-    const callbackName = `on${capitalize(event.name)}`;
+    const callbackName = `on${capitalize(camelCase(event.name))}`;
     const prevRefName = `__prev${capitalize(watchedProp)}`;
     lines.push(`  const ${prevRefName} = React.useRef(${watchedProp});`);
     lines.push(`  React.useEffect(() => {`);
@@ -457,6 +497,7 @@ export function emitReact(component: ComponentNode): EmittedFile[] {
     lines.push(`      role=${JSON.stringify(pattern.pattern)}`);
   }
   if (disabledProp) lines.push(isButtonPattern || isCheckboxPattern ? `      disabled={disabled}` : `      aria-disabled={disabled}`);
+  if (checkedProp && !isCheckboxPattern) lines.push(`      aria-checked={checked}`);
   // A keydown handler is inert on an element that can never receive focus — `tabIndex={0}`
   // is what makes a keyboard trigger honestly operable, not just declared.
   if (hasKeydownHandler(rootHandlers)) lines.push(`      tabIndex={0}`);

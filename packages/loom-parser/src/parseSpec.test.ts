@@ -500,6 +500,127 @@ expr: "not isEmpty(profile)"
     expect(loaded).toMatchObject({ kind: "derived", name: "loaded" });
   });
 
+  it("parses a selection block", () => {
+    const spec = `---
+name: radio-group
+kind: composite
+---
+
+## Declarations
+
+### selected
+
+\`\`\`yaml
+kind: selection
+type: string
+initialValue: compact
+\`\`\`
+`;
+    const component = parseSpec(spec);
+    const selection = component.declarations.find((d) => d.kind === "selection");
+    expect(selection).toMatchObject({ kind: "selection", name: "selected", valueType: { kind: "string" }, initialValue: "compact" });
+    expect(selection!.id).toBe("radio-group/declarations/selected");
+  });
+
+  it("parses an each.selects wire end to end, and checkComposition accepts it", () => {
+    const optionSpec = `---
+name: option
+kind: primitive
+---
+
+## Declarations
+
+### value
+
+\`\`\`yaml
+kind: prop
+type: string
+\`\`\`
+
+### press
+
+\`\`\`yaml
+kind: event
+payloadType: "record{}"
+\`\`\`
+`;
+    const option = parseSpec(optionSpec);
+    const listSpec = `---
+name: list
+kind: primitive
+---
+
+## Declarations
+
+### default
+
+\`\`\`yaml
+kind: slot
+\`\`\`
+`;
+    const list = parseSpec(listSpec);
+    const groupSpec = `---
+name: radio-group
+kind: composite
+---
+
+## Declarations
+
+### options
+
+\`\`\`yaml
+kind: prop
+type: "list<record{value: string}>"
+default: []
+\`\`\`
+
+### selected
+
+\`\`\`yaml
+kind: selection
+type: string
+initialValue: a
+\`\`\`
+
+## Composition
+
+### list-instance
+
+\`\`\`yaml
+kind: uses
+component: list
+root: true
+slotContent:
+  default:
+    each:
+      over: options
+      as: option
+      use: option-template
+      selects: { on: press, selection: selected, field: value }
+\`\`\`
+
+### option-template
+
+\`\`\`yaml
+kind: uses
+component: option
+props:
+  value:
+    expr: "option.value"
+\`\`\`
+`;
+    const group = parseSpec(groupSpec, {
+      resolveComponent: (ref) => {
+        if (ref === "list") return list;
+        if (ref === "option") return option;
+        throw new Error(`unknown component '${ref}'`);
+      },
+    });
+    const listInstance = group.composition.find((n) => n.name === "list-instance")!;
+    const content = listInstance.slotContent!.default as { each: { selects?: { on: string; selection: string; field: string } } };
+    expect(content.each.selects).toEqual({ on: "press", selection: "selected", field: "value" });
+  });
+
   it("parses a composite spec with {fields} slotContent, an {expr} computed prop, and a multi-target 'on' wire with payload", () => {
     const buttonSpec = `---
 name: button

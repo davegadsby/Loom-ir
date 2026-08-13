@@ -12,6 +12,8 @@ import {
   makeKeyTriggeredEventFixture,
   makeResourceFixture,
   makeCheckboxPatternFixture,
+  makeSelectionFixture,
+  makeCheckedPropFixture,
 } from "./fixtures.js";
 
 describe("emitReact", () => {
@@ -223,6 +225,32 @@ describe("emitReact — each (iteration)", () => {
     expect(file!.contents).toContain("label={task.label}");
     expect(file!.contents).not.toContain("__env");
     expect(file!.contents).not.toContain("loom-expr");
+  });
+});
+
+describe("emitReact — selection (shared mutual-exclusive state across each siblings)", () => {
+  it("emits a useState pair for the declared selection, seeded from initialValue", () => {
+    const [file] = emitReact(makeSelectionFixture());
+    expect(file!.contents).toContain('const [selected, setSelected] = React.useState<string>("a");');
+  });
+
+  it("each templated instance's own checked prop compiles to a comparison against the shared selection, no evaluate call", () => {
+    const [file] = emitReact(makeSelectionFixture());
+    expect(file!.contents).toContain("checked={(selected === option.value)}");
+    expect(file!.contents).not.toContain("evaluate(");
+  });
+
+  it("merges the set-cell effect into the same handler as the template's own on-wired emit, in one attribute", () => {
+    const [file] = emitReact(makeSelectionFixture());
+    const onPressCount = (file!.contents.match(/onPress=/g) ?? []).length;
+    expect(onPressCount).toBe(1);
+    expect(file!.contents).toContain("onPress={() => { onOptionSelected?.({ value: option.value }); setSelected(option.value); }}");
+  });
+
+  it("aria-checked mirrors a declared checked prop on a non-checkbox-pattern root", () => {
+    const [file] = emitReact(makeCheckedPropFixture());
+    expect(file!.contents).toContain("aria-checked={checked}");
+    expect(file!.contents).toContain('role="radio"');
   });
 });
 

@@ -143,7 +143,30 @@ export interface ResourceNode extends LoomNodeEnvelope {
   dataType: LoomType;
 }
 
-export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode | FieldNode | DerivedNode | ResourceNode;
+/**
+ * Local, parent-owned mutable state — not consumer-provided (`PropNode`),
+ * not a native text control (`FieldNode`), not a pure function of other
+ * declarations (`DerivedNode`). Exists so N sibling `each`-templated
+ * instances can share exactly one value: every rendered instance reads it
+ * for its own "am I selected" comparison, and any one instance's own
+ * activation can overwrite it via a `set-cell` `Effect`
+ * (`EachSlotContent.each.selects`) — writing the one shared cell is what
+ * "deselects" every other sibling, with no per-instance state to
+ * synchronize. Restricted to a primitive/enum `valueType` in
+ * `checkComposition` — nothing here needs the interpreter's structural
+ * equality a record/list-valued selection would require.
+ */
+export interface SelectionNode extends LoomNodeEnvelope {
+  kind: "selection";
+  name: string;
+  valueType: LoomType;
+  /** Required, unlike PropNode.defaultValue — sidesteps the known Angular
+   * strictNullChecks defaultless-prop gap; a SelectionNode always starts
+   * with a real value. */
+  initialValue: LoomValue;
+}
+
+export type DeclarationNode = PropNode | EventNode | SlotNode | MethodNode | FieldNode | DerivedNode | ResourceNode | SelectionNode;
 
 // ---------------------------------------------------------------------------
 // Machine
@@ -335,6 +358,17 @@ export interface EachSlotContent {
     as: string;
     use: string;
     key?: string;
+    /**
+     * Wires this template's own declared child event (named by `on`) to
+     * ALSO set a sibling `SelectionNode` declared on *this* composing
+     * component, sourced from `field` of the currently-bound item (`field`
+     * must be a field of `T`, `T` must be a `record`, and its type must
+     * match the `SelectionNode`'s own `valueType`). `lower.ts` merges this
+     * into the same `Handler` that event's own `on` wiring already
+     * produces — one DOM-facing trigger, one `Handler`, possibly multiple
+     * `Effect`s.
+     */
+    selects?: { on: string; selection: string; field: string };
   };
 }
 

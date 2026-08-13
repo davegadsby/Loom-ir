@@ -11,6 +11,8 @@ import {
   makeResourceFixture,
   makeKeyTriggeredEventFixture,
   makeCheckboxPatternFixture,
+  makeSelectionFixture,
+  makeCheckedPropFixture,
 } from "./fixtures.js";
 
 describe("emitAngular", () => {
@@ -222,6 +224,33 @@ describe("emitAngular — each (iteration)", () => {
     expect(file!.contents).toContain("return task.done;");
     expect(file!.contents).toContain("return task.label;");
     expect(file!.contents).not.toContain("loom-expr");
+  });
+});
+
+describe("emitAngular — selection (shared mutual-exclusive state across each siblings)", () => {
+  it("emits a plain mutable class field for the declared selection, seeded from initialValue", () => {
+    const [file] = emitAngular(makeSelectionFixture());
+    expect(file!.contents).toContain('selected: string = "a";');
+  });
+
+  it("each templated instance's own checked getter compiles to a comparison against the shared selection, no evaluate call", () => {
+    const [file] = emitAngular(makeSelectionFixture());
+    expect(file!.contents).toContain("optionTemplateChecked(option: any): boolean {");
+    expect(file!.contents).toContain("return (this.selected === option.value);");
+    expect(file!.contents).not.toContain("evaluate(");
+  });
+
+  it("merges the set-cell effect into the same (press) handler as the template's own on-wired emit, via the *ngFor template variable in scope, with no generated method", () => {
+    const [file] = emitAngular(makeSelectionFixture());
+    const pressAttrCount = (file!.contents.match(/\(press\)=/g) ?? []).length;
+    expect(pressAttrCount).toBe(1);
+    expect(file!.contents).toContain('(press)="optionSelected.emit({ value: option.value }); selected = option.value"');
+  });
+
+  it("[attr.aria-checked] mirrors a declared checked prop on a non-checkbox-pattern root", () => {
+    const [file] = emitAngular(makeCheckedPropFixture());
+    expect(file!.contents).toContain('[attr.aria-checked]="checked"');
+    expect(file!.contents).toContain(`[attr.role]="'radio'"`);
   });
 });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LoomType } from "loom-expr";
 import { checkComposition, CompositionCheckError } from "./composition.js";
-import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode, DerivedNode, ResourceNode } from "./nodes.js";
+import type { ComponentNode, PropNode, EventNode, SlotNode, UsesNode, FieldNode, DerivedNode, ResourceNode, SelectionNode } from "./nodes.js";
 
 function makeChildComponent(overrides: Partial<ComponentNode> = {}): ComponentNode {
   return {
@@ -706,6 +706,227 @@ describe("checkComposition", () => {
         ],
       });
       expect(() => checkComposition(widget)).toThrow(/invalid computed expression/);
+    });
+  });
+
+  describe("selection + each.selects", () => {
+    const selectableItemType: LoomType = { kind: "record", fields: { value: { kind: "string" }, label: { kind: "string" } } };
+    const optionsProp: PropNode = {
+      id: "widget/declarations/options",
+      kind: "prop",
+      origin: "own",
+      assertable: false,
+      name: "options",
+      valueType: { kind: "list", of: selectableItemType },
+      defaultValue: [],
+    };
+    const selected: SelectionNode = {
+      id: "widget/declarations/selected",
+      kind: "selection",
+      origin: "own",
+      assertable: false,
+      name: "selected",
+      valueType: { kind: "string" },
+      initialValue: "a",
+    };
+    const selectableChild = makeChildComponent({
+      id: "option",
+      name: "option",
+      declarations: [
+        { id: "option/declarations/value", kind: "prop", origin: "own", assertable: false, name: "value", valueType: { kind: "string" } },
+        { id: "option/declarations/checked", kind: "prop", origin: "own", assertable: false, name: "checked", valueType: { kind: "bool" } },
+        {
+          id: "option/declarations/press",
+          kind: "event",
+          origin: "own",
+          assertable: false,
+          name: "press",
+          payloadType: { kind: "record", fields: {} },
+        },
+      ],
+    });
+    function makeOptionUses(overrides: Partial<UsesNode>): UsesNode {
+      return {
+        id: "widget/composition/option-template",
+        kind: "uses",
+        origin: "own",
+        assertable: false,
+        name: "option-template",
+        component: "option",
+        resolvedComponent: selectableChild,
+        ...overrides,
+      };
+    }
+    const optionValueExpr = { type: "member", target: { type: "ref", name: "option" }, property: "value" } as const;
+
+    it("rejects a selection whose valueType is not a primitive/enum", () => {
+      const recordSelection: SelectionNode = { ...selected, valueType: { kind: "record", fields: {} } };
+      const widget = makeWidget({ declarations: [recordSelection] });
+      expect(() => checkComposition(widget)).toThrow(/selections are restricted to bool\/int\/float\/string\/enum/);
+    });
+
+    it("accepts a valid each.selects: wires a template event to set a sibling selection from a bound item field", () => {
+      const widget = makeWidget({
+        declarations: [optionsProp, selected],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: {
+              default: { each: { over: "options", as: "option", use: "option-template", selects: { on: "press", selection: "selected", field: "value" } } },
+            },
+          }),
+          makeOptionUses({ props: { value: { expr: optionValueExpr } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("lets a composed {expr} prop reference the selection by name, alongside the each's own bound ident", () => {
+      const checkedExpr = { type: "binop", op: "==", left: { type: "ref", name: "selected" }, right: optionValueExpr } as const;
+      const widget = makeWidget({
+        declarations: [optionsProp, selected],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: {
+              default: { each: { over: "options", as: "option", use: "option-template", selects: { on: "press", selection: "selected", field: "value" } } },
+            },
+          }),
+          makeOptionUses({ props: { value: { expr: optionValueExpr }, checked: { expr: checkedExpr } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("throws when each.selects.selection is not a declared selection", () => {
+      const widget = makeWidget({
+        declarations: [optionsProp],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: {
+              default: { each: { over: "options", as: "option", use: "option-template", selects: { on: "press", selection: "missing", field: "value" } } },
+            },
+          }),
+          makeOptionUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/each.selects.selection 'missing' is not a declared selection/);
+    });
+
+    it("throws when each.selects.field is not a field of the item's record type", () => {
+      const widget = makeWidget({
+        declarations: [optionsProp, selected],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: {
+              default: { each: { over: "options", as: "option", use: "option-template", selects: { on: "press", selection: "selected", field: "missing" } } },
+            },
+          }),
+          makeOptionUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/each.selects.field 'missing' is not a field/);
+    });
+
+    it("throws when each.selects.field's type doesn't match the selection's own valueType", () => {
+      const boolSelection: SelectionNode = { ...selected, valueType: { kind: "bool" } };
+      const widget = makeWidget({
+        declarations: [optionsProp, boolSelection],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: {
+              default: { each: { over: "options", as: "option", use: "option-template", selects: { on: "press", selection: "selected", field: "value" } } },
+            },
+          }),
+          makeOptionUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/does not match selection 'selected''s type/);
+    });
+
+    it("throws when each.selects.on is not a declared event on the template's own referenced component", () => {
+      const widget = makeWidget({
+        declarations: [optionsProp, selected],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: {
+              default: { each: { over: "options", as: "option", use: "option-template", selects: { on: "missing", selection: "selected", field: "value" } } },
+            },
+          }),
+          makeOptionUses({}),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/each.selects.on 'missing' is not a declared event/);
+    });
+
+    it("accepts an 'on' payload sourced from a dotted <as>.<field> reference into the each's own bound item", () => {
+      const pressEvent: EventNode = {
+        id: "widget/declarations/option-pressed",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "option-pressed",
+        payloadType: { kind: "record", fields: { value: { kind: "string" } } },
+      };
+      const widget = makeWidget({
+        declarations: [optionsProp, pressEvent],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: { default: { each: { over: "options", as: "option", use: "option-template" } } },
+          }),
+          makeOptionUses({ on: { press: { event: "option-pressed", payload: { value: "option.value" } } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).not.toThrow();
+    });
+
+    it("throws when a dotted 'on' payload source's ident isn't the each this node is itself the template for", () => {
+      const pressEvent: EventNode = {
+        id: "widget/declarations/option-pressed",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "option-pressed",
+        payloadType: { kind: "record", fields: { value: { kind: "string" } } },
+      };
+      const widget = makeWidget({
+        declarations: [optionsProp, pressEvent],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: { default: { each: { over: "options", as: "option", use: "option-template" } } },
+          }),
+          makeOptionUses({ on: { press: { event: "option-pressed", payload: { value: "wrong.value" } } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/each-bound ident 'wrong' that is not in scope/);
+    });
+
+    it("throws when a dotted 'on' payload source's field isn't a field of the bound item's type", () => {
+      const pressEvent: EventNode = {
+        id: "widget/declarations/option-pressed",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "option-pressed",
+        payloadType: { kind: "record", fields: { value: { kind: "string" } } },
+      };
+      const widget = makeWidget({
+        declarations: [optionsProp, pressEvent],
+        composition: [
+          makeUses({
+            root: true,
+            slotContent: { default: { each: { over: "options", as: "option", use: "option-template" } } },
+          }),
+          makeOptionUses({ on: { press: { event: "option-pressed", payload: { value: "option.missing" } } } }),
+        ],
+      });
+      expect(() => checkComposition(widget)).toThrow(/'missing' is not a field of 'option''s item type/);
     });
   });
 

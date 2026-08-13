@@ -157,13 +157,25 @@ function lowerField(field: FieldNode): RenderNode {
  * meaning is what this unifies away, not a distinction this lowering needs
  * to preserve.
  */
-function lowerOnWiring(on: UsesNode["on"]): Handler[] {
+/**
+ * `boundIdent`, when set, is the `each` this node is itself the template
+ * for's own bound name — a dotted payload source (e.g. `"option.value"`)
+ * whose prefix matches it lowers to a `member` `Expr` reading off the
+ * bound item, instead of the usual bare `ref`.
+ */
+function lowerOnWiring(on: UsesNode["on"], boundIdent?: string): Handler[] {
   return Object.entries(on ?? {}).map(([childEventName, wireRaw]) => {
     const wires = Array.isArray(wireRaw) ? wireRaw : [wireRaw];
     const effects: Effect[] = wires.map((w) => {
       const target: OnWireTarget = typeof w === "string" ? { event: w } : w;
       const payload: EmitPayload = Object.fromEntries(
-        Object.entries(target.payload ?? {}).map(([k, source]): [string, Expr] => [k, { type: "ref", name: source }])
+        Object.entries(target.payload ?? {}).map(([k, source]): [string, Expr] => {
+          const dotIndex = source.indexOf(".");
+          if (dotIndex !== -1 && source.slice(0, dotIndex) === boundIdent) {
+            return [k, { type: "member", target: { type: "ref", name: boundIdent }, property: source.slice(dotIndex + 1) }];
+          }
+          return [k, { type: "ref", name: source }];
+        })
       );
       return { kind: "emit", event: target.event, payload };
     });
@@ -174,7 +186,8 @@ function lowerOnWiring(on: UsesNode["on"]): Handler[] {
 function lowerUsesInstance(
   node: UsesNode,
   byName: ReadonlyMap<string, UsesNode>,
-  fieldsByName: ReadonlyMap<string, FieldNode>
+  fieldsByName: ReadonlyMap<string, FieldNode>,
+  eachContext?: { as: string; selects?: { on: string; selection: string; field: string } }
 ): RenderNode {
   const ref = node.resolvedComponent;
   const refSlots = ref.declarations.filter((d) => d.kind === "slot");
@@ -195,14 +208,14 @@ function lowerUsesInstance(
         { kind: "fragment", children: content.uses.map((n) => lowerUsesInstance(byName.get(n)!, byName, fieldsByName)) },
       ];
     } else if ("each" in content) {
-      const { over, as, use, key } = content.each;
+      const { over, as, use, key, selects } = content.each;
       fills[slot.name] = [
         {
           kind: "each",
           ident: as,
           over: { type: "ref", name: over },
           key: key ? { type: "member", target: { type: "ref", name: as }, property: key } : undefined,
-          body: [lowerUsesInstance(byName.get(use)!, byName, fieldsByName)],
+          body: [lowerUsesInstance(byName.get(use)!, byName, fieldsByName, { as, selects })],
         },
       ];
     } else {
@@ -210,7 +223,20 @@ function lowerUsesInstance(
     }
   }
 
-  return { kind: "instance", name: node.name, component: ref, props, fills, handlers: lowerOnWiring(node.on), sourceId: node.id };
+  const handlers = lowerOnWiring(node.on, eachContext?.as);
+  if (eachContext?.selects) {
+    const { on, selection, field } = eachContext.selects;
+    const setCellEffect: Effect = {
+      kind: "set-cell",
+      cell: selection,
+      from: { kind: "expr", expr: { type: "member", target: { type: "ref", name: eachContext.as }, property: field } },
+    };
+    const existingHandler = handlers.find((h) => h.on === on);
+    if (existingHandler) existingHandler.effects.push(setCellEffect);
+    else handlers.push({ on, effects: [setCellEffect] });
+  }
+
+  return { kind: "instance", name: node.name, component: ref, props, fills, handlers, sourceId: node.id };
 }
 
 /**
