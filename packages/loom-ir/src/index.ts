@@ -9,6 +9,7 @@ export type {
   FieldNode,
   DerivedNode,
   ResourceNode,
+  SelectionNode,
   DeclarationNode,
   StateNode,
   TransitionNode,

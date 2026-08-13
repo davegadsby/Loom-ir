@@ -1,4 +1,4 @@
-import type { Attr, ComponentNode, DerivedNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode, ResourceNode, UsesNode } from "loom-ir";
+import type { Attr, ComponentNode, DerivedNode, EmittedFile, EventNode, FieldNode, Handler, PropNode, RenderNode, ResourceNode, SelectionNode, UsesNode } from "loom-ir";
 import { lower, lowerComposition, lowerRootHandlers, hasKeydownHandler } from "loom-ir";
 import { partClassName } from "loom-emit-styles";
 import {
@@ -78,7 +78,9 @@ function eachTemplateIdents(nodes: readonly UsesNode[]): Map<string, string> {
  * members are never bare local variables. `derived` is omitted by a derived
  * value's own getter (composition.ts checks its `expr` against only props/
  * fields, never another derived value) and included for a computed-prop
- * getter, which may reference a declared derived value by name. `boundIdent`
+ * getter, which may reference a declared derived value by name. A
+ * `SelectionNode` resolves through `this.` too — a plain, mutable class
+ * field, not a getter, but resolved the same way. `boundIdent`
  * (an each-template method's own loop-variable parameter) resolves to
  * itself, bare — a method parameter, not a `this.` member.
  */
@@ -87,6 +89,7 @@ function buildRefResolver(
   fields: readonly FieldNode[],
   resources: readonly ResourceNode[] = [],
   derived: readonly DerivedNode[] = [],
+  selections: readonly SelectionNode[] = [],
   boundIdent?: string
 ): RefResolver {
   const map = new Map<string, string>();
@@ -98,6 +101,7 @@ function buildRefResolver(
     map.set(`${f.name}Valid`, `this.${c}Valid`);
   }
   for (const d of derived) map.set(d.name, `this.${camelCase(d.name)}`);
+  for (const s of selections) map.set(s.name, `this.${camelCase(s.name)}`);
   if (boundIdent) map.set(boundIdent, boundIdent);
   return (name) => {
     const resolved = map.get(name);
@@ -132,13 +136,30 @@ function printPropAttr(k: string, expr: Expr, instanceName: string, boundIdent: 
  * because every source component's declared payload is itself `record{}`.
  */
 function printEmitEffect(effect: Extract<Handler["effects"][number], { kind: "emit" }>): string {
-  const payloadEntries = Object.entries(effect.payload).map(([k, expr]) => `${k}: ${(expr as Extract<Expr, { type: "ref" }>).name}`);
-  return `${effect.event}.emit({ ${payloadEntries.join(", ")} })`;
+  const payloadEntries = Object.entries(effect.payload).map(
+    ([k, expr]) => `${k}: ${expr.type === "member" ? printBareRef(expr) : (expr as Extract<Expr, { type: "ref" }>).name}`
+  );
+  return `${camelCase(effect.event)}.emit({ ${payloadEntries.join(", ")} })`;
 }
 
-/** `dispatch` calls the same `dispatch(eventName: string): void` method the class already declares whenever it has a machine — always present by the time a `dispatch` effect can exist, since `lowerRootHandlers` only ever produces one from an actual `TransitionNode.trigger`. Single-quoted, matching this file's own template-string-literal convention (not `JSON.stringify`, which is double-quoted). */
+/**
+ * `dispatch` calls the same `dispatch(eventName: string): void` method the class already
+ * declares whenever it has a machine — always present by the time a `dispatch` effect can
+ * exist, since `lowerRootHandlers` only ever produces one from an actual `TransitionNode.trigger`.
+ * Single-quoted, matching this file's own template-string-literal convention (not
+ * `JSON.stringify`, which is double-quoted). `set-cell` prints a plain assignment statement —
+ * an ordinary, standard Angular template-statement form — with no `this.` prefix, matching
+ * every other effect here: Angular template expressions already resolve a bare component
+ * member implicitly.
+ */
 function printEffect(effect: Handler["effects"][number]): string {
   if (effect.kind === "dispatch") return `dispatch('${effect.event}')`;
+  if (effect.kind === "set-cell") {
+    if (effect.from.kind !== "expr") {
+      throw new Error(`printEffect: set-cell 'from' kind '${effect.from.kind}' is unsupported by this backend`);
+    }
+    return `${camelCase(effect.cell)} = ${printBareRef(effect.from.expr)}`;
+  }
   if (effect.kind !== "emit") throw new Error(`printEffect: unsupported effect kind '${effect.kind}'`);
   return printEmitEffect(effect);
 }
@@ -290,7 +311,7 @@ function firesWhenLines(events: readonly EventNode[]): string[] {
     lines.push(
       `    if ('${prop}' in changes && !changes['${prop}'].firstChange && changes['${prop}'].currentValue === ${JSON.stringify(becomes)}) {`
     );
-    lines.push(`      this.${event.name}.emit({});`);
+    lines.push(`      this.${camelCase(event.name)}.emit({});`);
     lines.push(`    }`);
   }
   lines.push(`  }`, ``);
@@ -338,6 +359,8 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   const resources = component.declarations.filter((d): d is ResourceNode => d.kind === "resource");
   const pattern = component.a11y.find((n) => n.kind === "pattern-conformance");
   const disabledProp = props.find((p) => p.name === "disabled");
+  const checkedProp = props.find((p) => p.name === "checked");
+  const selections = component.declarations.filter((d): d is SelectionNode => d.kind === "selection");
   const hasMachine = component.states.length > 0;
   // `VisualConformanceNode` carries no CSS (§ Style scope), so it doesn't count toward "this part is styled."
   // Only `"root"` can ever apply here: unlike React, Angular's named slots are
@@ -399,6 +422,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     attrs.push(`[attr.role]="'${pattern.pattern}'"`);
   }
   if (disabledProp) attrs.push(isButtonPattern || isCheckboxPattern ? `[disabled]="disabled"` : `[attr.aria-disabled]="disabled"`);
+  if (checkedProp && !isCheckboxPattern) attrs.push(`[attr.aria-checked]="checked"`);
   // A real checkbox's `[checked]` binding already conveys what `[attr.data-state]` existed
   // to express — and its own dispatch handler (still semantically "click", matching the
   // transitions' own declared trigger name — only the DOM binding it prints under changes)
@@ -453,7 +477,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   }
   for (const event of events) {
     lines.push(`  /** ${event.id} */`);
-    lines.push(`  @Output() ${event.name} = new EventEmitter<${loomTypeToTs(event.payloadType)}>();`);
+    lines.push(`  @Output() ${camelCase(event.name)} = new EventEmitter<${loomTypeToTs(event.payloadType)}>();`);
   }
 
   for (const field of fields) {
@@ -479,6 +503,14 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
     lines.push(``);
   }
 
+  // Local, mutable, parent-owned state — not consumer-provided (unlike @Input()) and not
+  // recomputed from anything else (unlike a derived getter). Any one each-templated sibling's
+  // own set-cell effect (printed by printEffect above) can overwrite it directly.
+  for (const selection of selections) {
+    lines.push(`  ${camelCase(selection.name)}: ${loomTypeToTs(selection.valueType)} = ${JSON.stringify(selection.initialValue)};`);
+  }
+  if (selections.length > 0) lines.push(``);
+
   // A derived value's own getter is unconditional (bool-only for now — nothing yet needs
   // another valueType kind); a computed-prop getter's resolver additionally covers derived
   // names, so a composed `{ expr }` prop can reference one by name instead of repeating its
@@ -488,7 +520,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
       throw new Error(`emitAngular: derived '${derived.id}' has unsupported valueType kind '${derived.valueType.kind}' (only 'bool' is supported)`);
     }
     lines.push(`  get ${camelCase(derived.name)}(): boolean {`);
-    lines.push(`    return ${compileExprToJs(derived.expr, buildRefResolver(props, fields, resources))};`);
+    lines.push(`    return ${compileExprToJs(derived.expr, buildRefResolver(props, fields, resources, [], selections))};`);
     lines.push(`  }`);
     lines.push(``);
   }
@@ -505,7 +537,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
         (d): d is PropNode => d.kind === "prop" && d.name === propName
       )!.valueType;
       const tsType = loomTypeToTs(declaredType);
-      const resolveRef = buildRefResolver(props, fields, resources, derivedValues, boundIdent);
+      const resolveRef = buildRefResolver(props, fields, resources, derivedValues, selections, boundIdent);
       const result = compileExprToJs(value.expr, resolveRef);
       const name = computedPropGetterName(node.name, propName);
       if (boundIdent) {

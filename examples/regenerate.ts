@@ -19,6 +19,13 @@
  * section, loom-emit-styles) actually consumes. `now` is fixed so the lock's
  * `importedAt` stays deterministic — required for the byte-for-byte drift
  * check the same way every other generated file already is.
+ *
+ * `examples/material/` is a second, independent example set (Angular
+ * Material-replica specs, kept deliberately separate from the root set so
+ * the two experiments don't mix) — it shares this same
+ * compile/emit/write-files logic via `regenerateComponentSet` below, but
+ * has no Style section on any of its specs yet, so it skips the
+ * figma/tokens/reports steps entirely.
  */
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
@@ -67,25 +74,49 @@ writeFileSync(join(here, "figma.lock.json"), JSON.stringify(lock, null, 2) + "\n
 
 console.log(`Regenerated examples/{design-tokens.json,figma.lock.json} from examples/figma-variables-fixture.json`);
 
-for (const name of components) {
-  const component = loadComponent(join(specsDir, `${name}.md`));
+/**
+ * Compiles each named spec under `setSpecsDir` and writes its React/Angular/
+ * test/story output under `setGeneratedDir` — the shared core of both
+ * example sets. Style/CSS emission and the CLI-captured report/validate
+ * text stay outside this function since they're root-set-only concerns
+ * (see this file's own doc comment).
+ */
+function regenerateComponentSet(setSpecsDir: string, setGeneratedDir: string, setComponents: readonly string[]): void {
+  for (const name of setComponents) {
+    const component = loadComponent(join(setSpecsDir, `${name}.md`));
 
-  writeFiles(join(generatedDir, "react"), emitReact(component));
-  writeFiles(join(generatedDir, "angular"), emitAngular(component));
-  writeFiles(join(generatedDir, "tests"), emitAllTests(component));
-  // Storybook stories import the compiled component by relative path, so they
-  // must live alongside it, not in the generic tests output directory above.
-  writeFiles(join(generatedDir, "react"), emitStorybookPlay(component));
+    writeFiles(join(setGeneratedDir, "react"), emitReact(component));
+    writeFiles(join(setGeneratedDir, "angular"), emitAngular(component));
+    writeFiles(join(setGeneratedDir, "tests"), emitAllTests(component));
+    // Storybook stories import the compiled component by relative path, so they
+    // must live alongside it, not in the generic tests output directory above.
+    writeFiles(join(setGeneratedDir, "react"), emitStorybookPlay(component));
 
-  // Only components with Style nodes get a stylesheet — nothing to emit otherwise.
-  if (component.style.length > 0) {
-    writeFiles(join(generatedDir, "styles"), [emitComponentCss(component)]);
+    // Only components with Style nodes get a stylesheet — nothing to emit otherwise.
+    if (component.style.length > 0) {
+      writeFiles(join(setGeneratedDir, "styles"), [emitComponentCss(component)]);
+    }
   }
 }
 
+regenerateComponentSet(specsDir, generatedDir, components);
 writeFiles(join(generatedDir, "styles"), [emitTokensCss(tokens)]);
 
 console.log(`Regenerated examples/generated/{react,angular,tests,styles} for: ${components.join(", ")}`);
+
+const materialSpecsDir = join(here, "material", "specs");
+const materialGeneratedDir = join(here, "material", "generated");
+// Real standalone components only — interactive-base is a shared mixin spec
+// duplicated into this set for self-containment
+// (§ examples/material/specs/interactive-base.md), not something anyone
+// compiles as its own top-level example. `list` IS compiled here too (same
+// as the root set does for its own `list`/`list-item`) even though it's
+// also `radio-group`'s own composed dependency — a `uses` reference doesn't
+// emit its referenced component's files on its own.
+const materialComponents = ["list", "radio-button", "radio-group", "slide-toggle", "card"];
+regenerateComponentSet(materialSpecsDir, materialGeneratedDir, materialComponents);
+
+console.log(`Regenerated examples/material/generated/{react,angular,tests} for: ${materialComponents.join(", ")}`);
 
 // Captures the *actual* CLI output (spawned against the built bin, not a
 // hand-duplicated formatter) so these files can never silently drift from

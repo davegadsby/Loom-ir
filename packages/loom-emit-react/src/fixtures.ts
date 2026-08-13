@@ -1,4 +1,4 @@
-import type { ComponentNode, FieldNode, UsesNode } from "loom-ir";
+import type { ComponentNode, FieldNode, SelectionNode, UsesNode } from "loom-ir";
 import { parseExpr } from "loom-expr";
 
 /** Exercises props, an event, a slot, an unsupported method, and a guarded machine. */
@@ -503,6 +503,111 @@ export function makeEachFixture(): ComponentNode {
   return makeChildComponent("task-list", {
     declarations: [itemsProp],
     composition: [listUses, itemTemplate],
+  });
+}
+
+/**
+ * `radio-group`-shaped: a `SelectionNode` shared across each-templated
+ * `option` instances, wired via `each.selects` — mirrors
+ * `examples/material/specs/radio-group.md` closely enough to exercise the
+ * same code paths that fixture's regenerated output was verified against.
+ */
+export function makeSelectionFixture(): ComponentNode {
+  const list = makeChildComponent("list", {
+    declarations: [{ id: "list/declarations/default", kind: "slot", origin: "own", assertable: false, name: "default" }],
+  });
+  const option = makeChildComponent("option", {
+    declarations: [
+      { id: "option/declarations/value", kind: "prop", origin: "own", assertable: false, name: "value", valueType: { kind: "string" }, defaultValue: "" },
+      { id: "option/declarations/checked", kind: "prop", origin: "own", assertable: false, name: "checked", valueType: { kind: "bool" }, defaultValue: false },
+      {
+        id: "option/declarations/press",
+        kind: "event",
+        origin: "own",
+        assertable: false,
+        name: "press",
+        payloadType: { kind: "record", fields: {} },
+        trigger: { kind: "event", name: "click" },
+      },
+    ],
+  });
+
+  const optionsProp = {
+    id: "radio-group/declarations/options",
+    kind: "prop" as const,
+    origin: "own" as const,
+    assertable: false as const,
+    name: "options",
+    valueType: { kind: "list" as const, of: { kind: "record" as const, fields: { value: { kind: "string" as const } } } },
+    defaultValue: [],
+  };
+  const selected: SelectionNode = {
+    id: "radio-group/declarations/selected",
+    kind: "selection",
+    origin: "own",
+    assertable: false,
+    name: "selected",
+    valueType: { kind: "string" },
+    initialValue: "a",
+  };
+  const optionSelectedEvent = {
+    id: "radio-group/declarations/option-selected",
+    kind: "event" as const,
+    origin: "own" as const,
+    assertable: false as const,
+    name: "option-selected",
+    payloadType: { kind: "record" as const, fields: { value: { kind: "string" as const } } },
+  };
+
+  const optionTemplate: UsesNode = {
+    id: "radio-group/composition/option-template",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "option-template",
+    component: "option",
+    resolvedComponent: option,
+    props: {
+      value: { expr: parseExpr("option.value") },
+      checked: { expr: parseExpr("selected == option.value") },
+    },
+    on: { press: { event: "option-selected", payload: { value: "option.value" } } },
+  };
+
+  const listUses: UsesNode = {
+    id: "radio-group/composition/list-instance",
+    kind: "uses",
+    origin: "own",
+    assertable: false,
+    name: "list-instance",
+    component: "list",
+    resolvedComponent: list,
+    root: true,
+    slotContent: {
+      default: { each: { over: "options", as: "option", use: "option-template", selects: { on: "press", selection: "selected", field: "value" } } },
+    },
+  };
+
+  return makeChildComponent("radio-group", {
+    declarations: [optionsProp, selected, optionSelectedEvent],
+    composition: [listUses, optionTemplate],
+  });
+}
+
+/**
+ * A machine-less, non-checkbox-pattern primitive with a `checked` bool
+ * prop — the shape `examples/material/specs/radio-button.md` takes.
+ * `isCheckboxPattern` is false (pattern is `"radio"`, falling into the
+ * generic `<div role="...">` path), so `checked` has no native DOM
+ * property of its own to bind to; `aria-checked` is the only place it
+ * reaches the DOM at all.
+ */
+export function makeCheckedPropFixture(): ComponentNode {
+  return makeChildComponent("radio-button", {
+    declarations: [
+      { id: "radio-button/declarations/checked", kind: "prop", origin: "own", assertable: false, name: "checked", valueType: { kind: "bool" }, defaultValue: false },
+    ],
+    a11y: [{ id: "radio-button/a11y/radio-pattern", kind: "pattern-conformance", origin: "own", assertable: true, verify: "a11y", pattern: "radio" }],
   });
 }
 

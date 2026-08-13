@@ -239,3 +239,20 @@ All four are checked in CI (`.github/workflows/ci.yml`).
   and there's no type information available at this compile step to
   guard the case reliably, so it's flagged in `compileExprToJs`'s own doc
   comment rather than silently risked.
+- Fixed: every declared event name is a kebab-case slug like any other
+  declared name, but both emitters used to build callback-prop/`@Output`
+  identifiers via `capitalize(name)` alone — valid only for a single-word
+  name (`onPress`), and silently invalid JS (`onOption-selected`,
+  `@Output() option-selected`) for a multi-word one. Never hit before
+  `examples/material/specs/radio-group.md`'s `option-selected` event,
+  since every prior example's event names happened to be one word.
+  `camelCase(name)` (a no-op on an already-single-word name — confirmed
+  zero-diff across every existing committed example) now runs before
+  `capitalize` everywhere an event name becomes part of an identifier:
+  `packages/loom-emit-react/src/emitReact.ts`'s props-interface/
+  destructuring/`firesWhen`/`printEmitEffect`/`printHandlers` sites, and
+  `packages/loom-emit-angular/src/emitAngular.ts`'s `@Output()` member,
+  `printEmitEffect`, and `firesWhenLines`. `SelectionNode` +
+  `each.selects` (the mechanism that gives N sibling `each`-templated
+  instances one shared, mutually-exclusive selected value) shipped in the
+  same pass — see `docs/material-parity.md` for the full design.

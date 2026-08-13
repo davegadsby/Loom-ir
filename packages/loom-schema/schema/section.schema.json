@@ -11,6 +11,7 @@
     { "$ref": "#/$defs/field" },
     { "$ref": "#/$defs/derived" },
     { "$ref": "#/$defs/resource" },
+    { "$ref": "#/$defs/selection" },
     { "$ref": "#/$defs/state" },
     { "$ref": "#/$defs/transition" },
     { "$ref": "#/$defs/guard" },
@@ -124,6 +125,16 @@
       "properties": {
         "kind": { "const": "resource" },
         "dataType": { "type": "string", "description": "Type-text for ONE loaded item, e.g. 'record{email: string}'. The value graph sees this declaration as list<dataType> — 0 elements before load, 1 once loaded." }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "type", "initialValue"],
+      "properties": {
+        "kind": { "const": "selection" },
+        "type": { "type": "string", "description": "Type-text, e.g. 'string'. Restricted to bool/int/float/string/enum by checkComposition." },
+        "initialValue": { "description": "Required — a selection always starts with a real value." }
       }
     },
     "state": {
@@ -354,7 +365,18 @@
                   "over": { "type": "string", "description": "Name of a declared prop on this component, of type list<T> — the collection to iterate." },
                   "as": { "type": "string", "description": "Bound name for each item, in scope inside `use`'s own props/slotContent { expr } values." },
                   "use": { "type": "string", "description": "Name of a sibling `uses` node in this component's Composition section, instantiated once per item." },
-                  "key": { "type": "string", "description": "Name of a field of T (T must be a record) — used as React's key / Angular's trackBy." }
+                  "key": { "type": "string", "description": "Name of a field of T (T must be a record) — used as React's key / Angular's trackBy." },
+                  "selects": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["on", "selection", "field"],
+                    "properties": {
+                      "on": { "type": "string", "description": "Name of a declared event on `use`'s own referenced component." },
+                      "selection": { "type": "string", "description": "Name of a declared `selection` on this composing component." },
+                      "field": { "type": "string", "description": "Name of a field of T sourced as the new selected value when `on` fires." }
+                    },
+                    "description": "Wires `use`'s own `on` event to also set a sibling `selection` on this composing component, letting N sibling each-rendered instances share one mutual-exclusive selected value."
+                  }
                 }
               }
             }
@@ -371,7 +393,7 @@
         "payload": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "Maps a field of the fired event's declared payloadType record to a source name — a sibling FieldNode name or a declared prop name, both on this component."
+          "description": "Maps a field of the fired event's declared payloadType record to a source name — a sibling FieldNode name, a declared prop name (both on this component), or (inside an `each` template) a dotted `<as>.<field>` reference into the currently-bound item."
         }
       }
     }

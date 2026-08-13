@@ -213,6 +213,14 @@ function buildDeclarationNode(componentSlug: string, block: RawNodeBlock): Decla
         name: block.slug,
         dataType: parseTypeText(yaml.dataType as string),
       };
+    case "selection":
+      return {
+        ...envelope,
+        kind: "selection",
+        name: block.slug,
+        valueType: parseTypeText(yaml.type as string),
+        initialValue: yaml.initialValue as never,
+      };
     case "method": {
       const rawParams = (yaml.params as Array<{ name: string; type: string }> | undefined) ?? [];
       return {

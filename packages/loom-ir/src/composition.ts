@@ -1,5 +1,7 @@
 import { typecheck, typeEquals, typeToString, type Expr, type LoomType, type TypecheckContext } from "loom-expr";
-import type { ComponentNode, DerivedNode, EventNode, FieldNode, OnWireTarget, PropNode, PropValue, ResourceNode, Trigger } from "./nodes.js";
+import type { ComponentNode, DerivedNode, EventNode, FieldNode, OnWireTarget, PropNode, PropValue, ResourceNode, SelectionNode, Trigger } from "./nodes.js";
+
+const SELECTION_VALUE_KINDS = new Set(["bool", "int", "float", "string", "enum"]);
 
 export class CompositionCheckError extends Error {}
 
@@ -36,6 +38,7 @@ export function checkComposition(component: ComponentNode): void {
   const ownFieldNames = new Set(ownFields.map((f) => f.name));
   const ownDerived = component.declarations.filter((d): d is DerivedNode => d.kind === "derived");
   const ownResources = component.declarations.filter((d): d is ResourceNode => d.kind === "resource");
+  const ownSelections = component.declarations.filter((d): d is SelectionNode => d.kind === "selection");
 
   // Env any component-scoped expression typechecks against: own props, plus each declared
   // field's own current value (string), derived `<name>Valid` boolean, and each declared
@@ -49,6 +52,7 @@ export function checkComposition(component: ComponentNode): void {
       ...Object.fromEntries(ownProps.map((p) => [p.name, p.valueType])),
       ...Object.fromEntries(ownFields.flatMap((f) => [[f.name, { kind: "string" } as LoomType], [`${f.name}Valid`, { kind: "bool" } as LoomType]])),
       ...Object.fromEntries(ownResources.map((r) => [r.name, { kind: "list", of: r.dataType } as LoomType])),
+      ...Object.fromEntries(ownSelections.map((s) => [s.name, s.valueType])),
     },
   };
 
@@ -93,6 +97,11 @@ export function checkComposition(component: ComponentNode): void {
           `derived '${decl.id}' declared type '${typeToString(decl.valueType)}' does not match its expression's type '${typeToString(resultType)}'`
         );
       }
+    }
+    if (decl.kind === "selection" && !SELECTION_VALUE_KINDS.has(decl.valueType.kind)) {
+      throw new CompositionCheckError(
+        `selection '${decl.id}' has valueType '${typeToString(decl.valueType)}' — selections are restricted to bool/int/float/string/enum`
+      );
     }
   }
 
@@ -248,7 +257,7 @@ export function checkComposition(component: ComponentNode): void {
       if ("each" in content) {
         // each.use's own resolvability was already checked structurally, alongside `uses`, in the
         // claiming pass above — nothing left to validate here but the semantics `uses` doesn't have.
-        const { over, key } = content.each;
+        const { over, key, selects } = content.each;
         const overProp = ownProps.find((p) => p.name === over);
         if (!overProp) {
           throw new CompositionCheckError(
@@ -265,6 +274,34 @@ export function checkComposition(component: ComponentNode): void {
           if (itemType.kind !== "record" || !(key in itemType.fields)) {
             throw new CompositionCheckError(
               `composition node '${node.id}' slot '${slotName}' each.key '${key}' is not a field of '${over}''s item type ('${typeToString(itemType)}')`
+            );
+          }
+        }
+        if (selects !== undefined) {
+          const itemType = overProp.valueType.of;
+          if (itemType.kind !== "record" || !(selects.field in itemType.fields)) {
+            throw new CompositionCheckError(
+              `composition node '${node.id}' slot '${slotName}' each.selects.field '${selects.field}' is not a field of '${over}''s item type ('${typeToString(itemType)}')`
+            );
+          }
+          const selectionDecl = ownSelections.find((s) => s.name === selects.selection);
+          if (!selectionDecl) {
+            throw new CompositionCheckError(
+              `composition node '${node.id}' slot '${slotName}' each.selects.selection '${selects.selection}' is not a declared selection on '${component.id}'`
+            );
+          }
+          if (itemType.kind === "record" && !typeEquals(itemType.fields[selects.field]!, selectionDecl.valueType)) {
+            throw new CompositionCheckError(
+              `composition node '${node.id}' slot '${slotName}' each.selects.field '${selects.field}' has type '${typeToString(itemType.fields[selects.field]!)}', which does not match selection '${selects.selection}''s type '${typeToString(selectionDecl.valueType)}'`
+            );
+          }
+          const templateNode = byName.get(content.each.use)!;
+          const templateEventNames = new Set(
+            templateNode.resolvedComponent.declarations.filter((d) => d.kind === "event").map((d) => d.name)
+          );
+          if (!templateEventNames.has(selects.on)) {
+            throw new CompositionCheckError(
+              `composition node '${node.id}' slot '${slotName}' each.selects.on '${selects.on}' is not a declared event on '${templateNode.component}'`
             );
           }
         }
@@ -310,6 +347,27 @@ export function checkComposition(component: ComponentNode): void {
           }
         }
         for (const source of Object.values(payload)) {
+          const dotIndex = source.indexOf(".");
+          if (dotIndex !== -1) {
+            // A dotted source (e.g. "option.value") reads a field off the bound
+            // ident of the `each` this node is itself the template for — the
+            // same binding `eachTemplateBinding` already resolves for `{expr}`
+            // prop typechecking above, reused here for payload sourcing.
+            const ident = source.slice(0, dotIndex);
+            const field = source.slice(dotIndex + 1);
+            const eachBinding = eachTemplateBinding.get(node.name);
+            if (!eachBinding || eachBinding.as !== ident) {
+              throw new CompositionCheckError(
+                `composition node '${node.id}' wires '${childEventName}' payload source '${source}' references an each-bound ident '${ident}' that is not in scope here`
+              );
+            }
+            if (eachBinding.itemType.kind !== "record" || !(field in eachBinding.itemType.fields)) {
+              throw new CompositionCheckError(
+                `composition node '${node.id}' wires '${childEventName}' payload source '${source}' — '${field}' is not a field of '${ident}''s item type`
+              );
+            }
+            continue;
+          }
           if (!ownFieldNames.has(source) && !ownPropNames.has(source)) {
             throw new CompositionCheckError(
               `composition node '${node.id}' wires '${childEventName}' payload source '${source}' is neither a declared field nor a declared prop on '${component.id}'`
