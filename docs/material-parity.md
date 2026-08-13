@@ -78,6 +78,19 @@ generalize":
    second hardcoded case (`checked → aria-checked`), not a general
    mechanism; a `progress-bar` spec needing `value → aria-valuenow` would
    need a *third* one, which is why it's Bucket B, not A (§6.2).
+3. **A primitive had no way to render one of its own props as its own
+   visible text content** — only a *composed child's* `{expr}` prop could
+   reference a value computed at render time; a primitive's own `lower()`
+   path only ever produced `slot` render nodes. This is why the first
+   `radio-button` pass rendered with no visible label at all. Fixed by a
+   small follow-up (`PropNode.content?: boolean`, see `AGENTS.md`'s Known
+   Gaps): `radio-button.md`'s and (in the root example set) `list-item.md`'s
+   own `label` props now render as real text. All five Material specs also
+   gained real `## Style` sections in the same pass (reusing `checkbox.md`'s
+   own `color.surface.default`/`spacing.sm` token paths), and
+   `.storybook/preview.ts` now actually imports `tokens.css` globally — the
+   combination of these three fixes is what makes every Material story
+   visually inspectable at all, not just structurally correct.
 
 ## 5. What this pass proves: `SelectionNode` + `each.selects`
 

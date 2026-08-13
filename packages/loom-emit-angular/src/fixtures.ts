@@ -631,6 +631,22 @@ export function makeCheckedPropFixture(): ComponentNode {
   });
 }
 
+/**
+ * A `list-item`-shaped primitive whose `label` prop is marked `content:
+ * true` — renders as this component's own text content instead of only
+ * being threaded through as data. No slots at all, matching both real
+ * instances of this gap (`list-item.md`, `radio-button.md`). Mirrors
+ * `loom-emit-react`'s `makeContentPropFixture` exactly.
+ */
+export function makeContentPropFixture(): ComponentNode {
+  return makeChildComponent("list-item", {
+    declarations: [
+      { id: "list-item/declarations/label", kind: "prop", origin: "own", assertable: false, name: "label", valueType: { kind: "string" }, defaultValue: "", content: true },
+      { id: "list-item/declarations/done", kind: "prop", origin: "own", assertable: false, name: "done", valueType: { kind: "bool" }, defaultValue: false },
+    ],
+  });
+}
+
 export function makeKeyTriggeredEventFixture(): ComponentNode {
   return makeChildComponent("dismiss-widget", {
     declarations: [

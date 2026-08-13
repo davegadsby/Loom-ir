@@ -18,16 +18,22 @@ import type { Expr } from "loom-expr";
 
 /**
  * Prints the render tree `lower()` produces for the non-composition path.
- * Only `slot` is exercised yet (Phase 1b); every other `RenderNode` kind
- * throws rather than silently rendering nothing. Unlike React, Angular's
+ * `slot` and `text` are the two kinds exercised so far (Phase 1b, and a
+ * `content` prop respectively); every other `RenderNode` kind throws
+ * rather than silently rendering nothing. Unlike React, Angular's
  * named-slot projections must print before the selector-less default
  * fallback regardless of declaration order — `<ng-content>` with no
  * `select` claims whatever the named selectors didn't, so it has to come
  * last. `lower()` keeps the tree itself in declaration order (React needs
  * that); this reordering is a real Angular-specific rendering decision, not
- * an IR concern.
+ * an IR concern. `checkComposition` guarantees a component never has both
+ * slots and a `text` node, so the two branches are mutually exclusive in
+ * practice, not merged here.
  */
 function printRenderNodes(nodes: readonly RenderNode[]): string {
+  const textNode = nodes.find((n): n is Extract<RenderNode, { kind: "text" }> => n.kind === "text");
+  if (textNode) return `{{ ${printBareRef(textNode.value)} }}`;
+
   const slots = nodes.filter((n): n is Extract<RenderNode, { kind: "slot" }> => n.kind === "slot");
   const unsupported = nodes.find((n) => n.kind !== "slot");
   if (unsupported) throw new Error(`printRenderNodes: unsupported render node kind '${unsupported.kind}'`);

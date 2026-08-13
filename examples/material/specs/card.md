@@ -67,3 +67,34 @@ The header/content/actions grouping is meant to read as one cohesive,
 visually-distinct surface (e.g. an elevated or outlined region), not
 three unrelated blocks — a subjective, unmeasured claim, same treatment
 as `list.md`'s `reads-as-a-list-not-a-generic-container`.
+
+## Style
+
+### root-background
+
+```yaml
+kind: token-ref
+part: root
+property: background-color
+token: color.surface.default
+```
+
+The same design-token binding `checkbox.md` (in the root example set)
+already proves — this is what actually makes the card read as a
+"visually-distinct surface" (§ Claims above) rather than a bare `<div>`.
+
+### root-layout
+
+```yaml
+kind: layout-intent
+part: root
+display: flex
+direction: column
+align: stretch
+gapToken: spacing.sm
+```
+
+Stacks `header`/`content`/`actions` top-to-bottom rather than the row
+layout every other Material spec so far uses — the first spec in either
+example set to declare a `column` `layout-intent`, matching a real
+`mat-card`'s own vertical stacking of its slotted regions.

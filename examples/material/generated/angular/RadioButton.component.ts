@@ -4,7 +4,8 @@ import { Component, EventEmitter, Input, Output } from "@angular/core";
 @Component({
   selector: "loom-radio-button",
   standalone: true,
-  template: `<div [attr.data-loom-component]="'radio-button'" [attr.role]="'radio'" [attr.aria-disabled]="disabled" [attr.aria-checked]="checked" (click)="press.emit({  })"></div>`,
+  template: `<div [attr.data-loom-component]="'radio-button'" class="loom-radio-button" [attr.role]="'radio'" [attr.aria-disabled]="disabled" [attr.aria-checked]="checked" (click)="press.emit({  })">{{ label }}</div>`,
+  styleUrls: ["../styles/RadioButton.css"],
 })
 export class RadioButtonComponent {
   /** interactive-base/declarations/disabled */

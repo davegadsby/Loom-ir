@@ -19,11 +19,10 @@ siblings: `checked` is a plain, parent-controlled bool prop, the same
 actual mutual-exclusivity logic (only one sibling ever reads
 `checked: true` at a time) lives entirely in whichever composite embeds
 it (`radio-group.md`), via a shared `selection` declaration and
-`each.selects` wiring. `label` is a real, typed prop threaded end to end
-but never rendered into this component's own DOM — the same documented
-gap `list-item.md`'s `label` already carries (no `RenderNode` construct
-yet exists for "show my own prop here"); a consumer/composite is
-expected to render it itself (see `radio-group.md`'s own `label` usage).
+`each.selects` wiring. `label` renders as this component's own text
+content (`content: true` on the prop below) — the same, now-closed gap
+`list-item.md`'s `label` also uses; previously a primitive had no way to
+render one of its own props as displayed content at all.
 
 **Keyboard.** Click-only. Real WAI-ARIA APG Radio Group keyboard
 behavior — arrow-key movement between siblings via roving `tabindex`,
@@ -54,10 +53,11 @@ checked.
 kind: prop
 type: string
 default: ""
+content: true
 ```
 
-This option's own display text. See Rationale — never rendered by this
-component itself.
+This option's own display text, rendered as this component's own text
+content (§ Rationale).
 
 ### checked
 
@@ -108,3 +108,33 @@ Conforms to the WAI-ARIA APG radio pattern's per-item shape — the
 group-level roving-tabindex/keyboard-navigation behavior is
 `radio-group.md`'s (undelivered, see Rationale) concern, not this
 primitive's.
+
+## Style
+
+### root-background
+
+```yaml
+kind: token-ref
+part: root
+property: background-color
+token: color.surface.default
+```
+
+The same design-token binding `checkbox.md` (in the root example set)
+already proves — every framework target stays in sync with the source
+design file instead of hardcoding a literal color.
+
+### root-layout
+
+```yaml
+kind: layout-intent
+part: root
+display: flex
+direction: row
+align: center
+gapToken: spacing.sm
+```
+
+Lays the radio button out as a row (the checked indicator and its label,
+once a real indicator element exists) with the design's standard small
+gap — the same minimal flex intent `checkbox.md` uses.

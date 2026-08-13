@@ -62,11 +62,17 @@ function slotPropName(slotName: string): string {
  * Only `slot` is exercised yet (Phase 1b); every other `RenderNode` kind
  * throws rather than silently rendering nothing, since a component that
  * needs one isn't supposed to reach this printer until a later phase adds
- * support for it.
+ * support for it. `"text"` is the one other kind exercised so far — a
+ * `content` prop (§ `lower()`), always a bare own-prop ref, printed via
+ * `printBareRef` the same way `each`'s `over`/`key` already are.
  */
 function printRenderNodes(nodes: readonly RenderNode[], componentSlug: string, styledParts: ReadonlySet<string>): string[] {
   const out: string[] = [];
   for (const node of nodes) {
+    if (node.kind === "text") {
+      out.push(`      {${printBareRef(node.value)}}`);
+      continue;
+    }
     if (node.kind !== "slot") throw new Error(`printRenderNodes: unsupported render node kind '${node.kind}'`);
     if (node.name === "default") {
       out.push(`      {children}`);

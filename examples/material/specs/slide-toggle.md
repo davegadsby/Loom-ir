@@ -154,3 +154,31 @@ ARIA terms even though it reads visually as a toggle switch. A documented,
 deliberate divergence, not an oversight; adding real switch-pattern
 native-tag treatment is separate, unscoped follow-up work (see
 `docs/material-parity.md`).
+
+## Style
+
+### root-background
+
+```yaml
+kind: token-ref
+part: root
+property: background-color
+token: color.surface.default
+```
+
+The same design-token binding `checkbox.md` (in the root example set)
+already proves.
+
+### root-layout
+
+```yaml
+kind: layout-intent
+part: root
+display: flex
+direction: row
+align: center
+gapToken: spacing.sm
+```
+
+Lays the toggle control out as a row with the design's standard small
+gap — the same minimal flex intent `checkbox.md` uses.
