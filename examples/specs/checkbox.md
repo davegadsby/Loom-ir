@@ -179,9 +179,16 @@ reimplementation.
 
 ```yaml
 kind: visual-conformance
-reference: figma://frame/checkbox-default
+reference: { kind: figma-frame, frameId: checkbox-default }
 ```
 
 The rendered checkbox is diffed against this Figma reference frame — the
 `(visual)` / Chromatic row the architecture always reserved a place for
 but never implemented until the Style taxonomy existed to name it.
+`reference` is a typed `image | figma-frame` union rather than an opaque
+string (`packages/loom-ir/src/nodes.ts`'s `VisualReference`) — this
+component still points at a Figma frame id since no exported image exists
+for it yet; a component with a real reference screenshot instead uses
+`{ kind: image, path: ... }`, resolved relative to this spec file's own
+directory and checked for existence by `checkVisualReferencesExist`
+(`packages/loom-validate/src/visualReferences.ts`).

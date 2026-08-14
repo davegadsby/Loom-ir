@@ -202,7 +202,14 @@ gapToken: spacing.sm
 
 \`\`\`yaml
 kind: visual-conformance
-reference: figma://frame/123
+reference: { kind: figma-frame, frameId: "123" }
+\`\`\`
+
+### matches-reference
+
+\`\`\`yaml
+kind: visual-conformance
+reference: { kind: image, path: reference-images/swatch.png }
 \`\`\`
 `;
 
@@ -224,10 +231,20 @@ reference: figma://frame/123
     expect(layout).toMatchObject({ part: "root", display: "flex", direction: "row", gapToken: "spacing.sm" });
   });
 
-  it("parses a visual-conformance node with the 'visual' verify route", () => {
+  it("parses a figma-frame visual-conformance node with the 'visual' verify route", () => {
     const swatch = parseSpec(styleSpec);
-    const visual = swatch.style.find((n) => n.kind === "visual-conformance");
-    expect(visual).toMatchObject({ reference: "figma://frame/123", verify: "visual", assertable: true });
+    const visual = swatch.style.find((n) => n.kind === "visual-conformance" && n.reference.kind === "figma-frame");
+    expect(visual).toMatchObject({ reference: { kind: "figma-frame", frameId: "123" }, verify: "visual", assertable: true });
+  });
+
+  it("parses an image-kind visual-conformance node", () => {
+    const swatch = parseSpec(styleSpec);
+    const visual = swatch.style.find((n) => n.kind === "visual-conformance" && n.reference.kind === "image");
+    expect(visual).toMatchObject({
+      reference: { kind: "image", path: "reference-images/swatch.png" },
+      verify: "visual",
+      assertable: true,
+    });
   });
 
   it("reads the frontmatter 'tokens' reference", () => {

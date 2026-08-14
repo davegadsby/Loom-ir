@@ -26,7 +26,7 @@ describe("emitComponentCss", () => {
         origin: "own",
         assertable: true,
         verify: "visual",
-        reference: "figma-frame-123",
+        reference: { kind: "figma-frame", frameId: "figma-frame-123" },
       },
     ];
     const file = emitComponentCss(component);

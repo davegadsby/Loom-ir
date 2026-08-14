@@ -6,3 +6,5 @@ export type { CemDriftResult } from "./cemDrift.js";
 export { checkCemDrift } from "./cemDrift.js";
 export type { TokenResolutionIssue, TokensResolveResult, TokensLockStalenessResult } from "./tokens.js";
 export { checkTokensResolve, checkTokensLockStaleness } from "./tokens.js";
+export type { VisualReferenceIssue, VisualReferencesResult } from "./visualReferences.js";
+export { checkVisualReferencesExist } from "./visualReferences.js";

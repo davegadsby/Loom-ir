@@ -261,3 +261,28 @@ All four are checked in CI (`.github/workflows/ci.yml`).
   `each.selects` (the mechanism that gives N sibling `each`-templated
   instances one shared, mutually-exclusive selected value) shipped in the
   same pass — see `docs/material-parity.md` for the full design.
+- Fixed: `VisualConformanceNode.reference` (§8's "(visual) | Chromatic |
+  Visual regression" row) used to be an inert opaque string, populated as
+  an unresolvable stub convention (`figma://frame/checkbox-default`) that
+  nothing ever opened, checked, or diffed against. It's now a typed
+  `VisualReference` union — `{ kind: "image"; path }` (a real
+  screenshot/mockup file, checked into the repo next to its spec, path
+  resolved relative to the spec's own directory the same way
+  `extends`/`uses` already resolve) or `{ kind: "figma-frame"; frameId }`
+  (for a design that still lives in Figma with no exported image yet).
+  `checkVisualReferencesExist` (`packages/loom-validate/src/visualReferences.ts`)
+  is the first real, cheap check against it — confirms an `image`-kind
+  reference's file actually exists on disk, the same class of typo/rename
+  catch `checkTokensResolve` does for design tokens. Deliberately does
+  *not* do real pixel-diffing — the IR only ever names the design source of
+  truth; which tool later validates the rendered output against it
+  (Chromatic, Percy, or the small hand-rolled differ below) is a separate,
+  swappable concern. `packages/loom-visual-diff`'s `diffImages` (pure,
+  `pixelmatch`-based pixel comparison) plus `examples/visualDiff.ts`
+  (browser-driven orchestration: builds Storybook, screenshots a live
+  story, diffs it against a reference image) is a first, real version of
+  that separate tool — deliberately a manual, advisory command
+  (`pnpm visual:diff`), not a CI gate; no similarity threshold is enforced,
+  since "close enough" is a human/agent judgment call on the printed
+  report and diff overlay, not a pass/fail one `loom validate` could
+  decide on its own.

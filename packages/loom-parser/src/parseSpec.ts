@@ -21,6 +21,7 @@ import {
   type Trigger,
   type UsesNode,
   type VerifyRoute,
+  type VisualReference,
 } from "loom-ir";
 import { parseDomain, parseExpr } from "loom-expr";
 import { parseSections, type RawNodeBlock } from "./markdown.js";
@@ -380,7 +381,7 @@ function buildStyleNode(componentSlug: string, block: RawNodeBlock): StyleNode {
         assertable: true,
         kind: "visual-conformance",
         verify: asVerify(yaml.verify, "visual"),
-        reference: yaml.reference as string,
+        reference: yaml.reference as VisualReference,
       };
     default:
       throw new Error(`node '${block.slug}' in Style has unexpected kind '${String(yaml.kind)}'`);

@@ -150,6 +150,27 @@ describe("loom-cli commands", () => {
     expect(stale.lockStaleness?.stale).toBe(true);
   });
 
+  it("validateCommand leaves visualReferences undefined for a spec with no image-kind reference (checkbox.md has a figma-frame one)", () => {
+    const outcome = validateCommand(checkboxSpec, {});
+    expect(outcome.visualReferences).toBeUndefined();
+  });
+
+  it("validateCommand runs the visual-reference existence check for a spec with an image-kind reference", () => {
+    const specPath = join(dir, "swatch.md");
+    writeFileSync(
+      specPath,
+      `---\nname: swatch\nkind: primitive\n---\n\n## Intent\n\nSwatch.\n\n## Style\n\n### matches-reference\n\n\`\`\`yaml\nkind: visual-conformance\nreference: { kind: image, path: reference.png }\n\`\`\`\n`,
+      "utf8"
+    );
+
+    const missing = validateCommand(specPath, {});
+    expect(missing.visualReferences).toEqual({ ok: false, issues: [{ nodeId: "swatch/style/matches-reference", path: "reference.png" }] });
+
+    writeFileSync(join(dir, "reference.png"), "not-a-real-png", "utf8");
+    const present = validateCommand(specPath, {});
+    expect(present.visualReferences).toEqual({ ok: true, issues: [] });
+  });
+
   it("loadComponent throws a clear error on an extends cycle instead of a stack overflow", () => {
     writeFileSync(
       join(dir, "a.md"),

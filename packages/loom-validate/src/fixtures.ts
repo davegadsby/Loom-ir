@@ -81,6 +81,22 @@ export function makeStyledFixture(): ComponentNode {
   return component;
 }
 
+/** `makeFixture` plus a single image-kind visual-conformance node, for exercising `checkVisualReferencesExist`. */
+export function makeVisualFixture(imagePath: string): ComponentNode {
+  const component = makeFixture();
+  component.style = [
+    {
+      id: "widget/style/matches-reference",
+      kind: "visual-conformance",
+      origin: "own",
+      assertable: true,
+      verify: "visual",
+      reference: { kind: "image", path: imagePath },
+    },
+  ];
+  return component;
+}
+
 export function makeTokensFixture(): DesignTokens {
   return {
     color: { surface: { default: { $value: "#F5F5F5", $type: "color" } } },

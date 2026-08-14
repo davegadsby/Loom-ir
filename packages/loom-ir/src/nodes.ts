@@ -297,10 +297,21 @@ export interface LayoutIntentNode extends LoomNodeEnvelope {
   justify?: string;
 }
 
-/** Fills the §8 "(visual) | Chromatic | Visual regression" row: a reference frame/baseline id to diff the rendered output against. */
+/**
+ * The design source of truth a component's rendered output should visually
+ * match. Deliberately decoupled from whichever tool later validates against
+ * it (Chromatic, Percy, a hand-rolled pixel-diff) — this only ever names the
+ * reference, never a specific validator. `image` is the general case (a real
+ * screenshot/mockup file, checked into the repo next to its spec);
+ * `figma-frame` exists for a design that still lives in Figma and has no
+ * exported image yet.
+ */
+export type VisualReference = { kind: "image"; path: string } | { kind: "figma-frame"; frameId: string };
+
+/** Fills the §8 "(visual) | Chromatic | Visual regression" row: a reference to diff the rendered output against. */
 export interface VisualConformanceNode extends LoomNodeEnvelope {
   kind: "visual-conformance";
-  reference: string;
+  reference: VisualReference;
 }
 
 export type StyleNode = TokenRefNode | LayoutIntentNode | VisualConformanceNode;
