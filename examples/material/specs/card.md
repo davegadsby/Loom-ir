@@ -98,3 +98,26 @@ Stacks `header`/`content`/`actions` top-to-bottom rather than the row
 layout every other Material spec so far uses — the first spec in either
 example set to declare a `column` `layout-intent`, matching a real
 `mat-card`'s own vertical stacking of its slotted regions.
+
+### matches-reference
+
+```yaml
+kind: visual-conformance
+reference: { kind: image, path: reference-images/card.jpeg }
+```
+
+A real Material card example, supplied directly rather than fetched (this
+environment has no outbound access to material.angular.io) — an
+avatar-plus-title/subtitle `header`, an image and body copy in `content`,
+and two text actions in `actions`, the first real `image`-kind
+`VisualReference` in either example set (see `AGENTS.md`'s Known Gaps).
+The first real, non-inert use of `checkVisualReferencesExist`
+(`packages/loom-validate/src/visualReferences.ts`) against committed
+content, not just a test fixture. Kept as the originally-supplied JPEG
+rather than re-encoded to PNG — no lossless conversion tooling is
+available in this environment, and a lossy re-encode would be less
+faithful to the source than the format mismatch it trades away. One real
+consequence: `loom-visual-diff`'s `diffImages` (the manual
+`pnpm visual:diff` pixel-diff tool) is PNG-only (`pngjs`), so this
+particular reference can't be diffed against with that tool yet — a
+documented boundary, not a silent gap.
