@@ -18,9 +18,9 @@ export function Card(props: CardProps): React.ReactElement {
       data-loom-component="card"
       className="loom-card"
     >
-      <div data-loom-slot="header">{header}</div>
-      <div data-loom-slot="content">{content}</div>
-      <div data-loom-slot="actions">{actions}</div>
+      <div data-loom-slot="header" className="loom-card__header">{header}</div>
+      <div data-loom-slot="content" className="loom-card__content">{content}</div>
+      <div data-loom-slot="actions" className="loom-card__actions">{actions}</div>
     </div>
   );
 }

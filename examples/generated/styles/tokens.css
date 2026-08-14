@@ -2,6 +2,15 @@
 :root {
   --color-surface-default: #f5f5f5;
   --color-surface-disabled: #e0e0e0;
+  --color-text-primary: #1c1b1f;
+  --color-text-secondary: #49454f;
+  --color-accent-default: #6750a4;
   --spacing-sm: 4px;
   --spacing-md: 8px;
+  --radius-md: 12px;
+  --elevation-raised: 0 1px 2px 0 rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15);
+  --typography-fontFamily: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --typography-title-size: 16px;
+  --typography-title-weight: 500;
+  --typography-body-size: 14px;
 }

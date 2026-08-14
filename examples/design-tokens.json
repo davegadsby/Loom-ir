@@ -9,6 +9,22 @@
         "$value": "#e0e0e0",
         "$type": "color"
       }
+    },
+    "text": {
+      "primary": {
+        "$value": "#1c1b1f",
+        "$type": "color"
+      },
+      "secondary": {
+        "$value": "#49454f",
+        "$type": "color"
+      }
+    },
+    "accent": {
+      "default": {
+        "$value": "#6750a4",
+        "$type": "color"
+      }
     }
   },
   "spacing": {
@@ -19,6 +35,40 @@
     "md": {
       "$value": "8px",
       "$type": "dimension"
+    }
+  },
+  "radius": {
+    "md": {
+      "$value": "12px",
+      "$type": "dimension"
+    }
+  },
+  "elevation": {
+    "raised": {
+      "$value": "0 1px 2px 0 rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15)",
+      "$type": "string"
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "$value": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "$type": "string"
+    },
+    "title": {
+      "size": {
+        "$value": "16px",
+        "$type": "string"
+      },
+      "weight": {
+        "$value": 500,
+        "$type": "number"
+      }
+    },
+    "body": {
+      "size": {
+        "$value": "14px",
+        "$type": "string"
+      }
     }
   }
 }
