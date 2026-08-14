@@ -311,7 +311,15 @@ backend.
 | `PropertyNode` | `emit-tests-jest` + fast-check | Sampled property test |
 | `ScenarioNode` | `emit-tests-sb` | Storybook play function |
 | `PatternConformanceNode` / `DeltaNode` | `emit-tests-axe` | jest-axe check |
-| (visual) | Chromatic | Visual regression |
+| `VisualConformanceNode` | (swappable) | Visual regression |
+
+`VisualConformanceNode.reference` names the design source of truth — a real
+reference image or a Figma frame id (`VisualReference` in
+`packages/loom-ir/src/nodes.ts`) — but deliberately does not hardcode which
+tool validates against it. Chromatic is one such tool; `loom-visual-diff`'s
+`diffImages` + `examples/visualDiff.ts` is a small first one built directly
+in this repo. Either way the split holds: the IR names the reference, a
+separate, swappable backend does the actual comparison.
 
 Because code and tests come from a single tree, they cannot drift from each other by
 construction — the failure mode where spec, implementation and tests each tell a different

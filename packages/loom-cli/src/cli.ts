@@ -81,6 +81,15 @@ export function buildProgram(): Command {
             process.exitCode = 1;
           }
         }
+        if (outcome.visualReferences) {
+          console.log(
+            `visual references:    ${outcome.visualReferences.ok ? "ok" : "FAIL"} (${outcome.visualReferences.issues.length} issue(s))`
+          );
+          for (const issue of outcome.visualReferences.issues) {
+            console.error(`FAIL: visual reference '${issue.path}' referenced by '${issue.nodeId}' does not exist`);
+          }
+          if (!outcome.visualReferences.ok) process.exitCode = 1;
+        }
         if (!outcome.gate.passed) {
           for (const failure of outcome.gate.failures) console.error(`FAIL: ${failure}`);
           process.exitCode = 1;

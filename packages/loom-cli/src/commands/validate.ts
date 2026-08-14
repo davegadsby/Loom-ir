@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { extractEmittedNodeIds, readLedger, type ResultsLedger } from "loom-results";
 import { emitStorybookPlay } from "loom-emit-tests";
 import type { DesignTokens, TokensLock } from "loom-tokens";
 import {
   checkTokensLockStaleness,
   checkTokensResolve,
+  checkVisualReferencesExist,
   computeEmissionCoverage,
   computeExpressibilityRatio,
   computeResultCoverage,
@@ -13,6 +15,7 @@ import {
   type Ratio,
   type TokensLockStalenessResult,
   type TokensResolveResult,
+  type VisualReferencesResult,
 } from "loom-validate";
 import { loadComponent } from "../loadComponent.js";
 import { emitAllTests } from "../emitAllTests.js";
@@ -35,6 +38,7 @@ export interface ValidateOutcome {
   gate: GateResult;
   tokensResolve?: TokensResolveResult;
   lockStaleness?: TokensLockStalenessResult;
+  visualReferences?: VisualReferencesResult;
 }
 
 /** `loom validate <spec>` — parse → run coverage checks → gate (§8/§10), plus optional token checks. */
@@ -70,5 +74,13 @@ export function validateCommand(specPath: string, options: ValidateOptions = {})
     }
   }
 
-  return { emission, result, expressibility, gate: gateResult, tokensResolve, lockStaleness };
+  // No opt-in flag needed, unlike --tokens/--lock — the reference paths are
+  // already declared in the spec itself, and specPath's own directory is
+  // already known. Only surfaced when the component actually has an
+  // image-kind reference, so a spec with none (every spec today) sees no
+  // change in validate's output.
+  const hasImageReference = component.style.some((n) => n.kind === "visual-conformance" && n.reference.kind === "image");
+  const visualReferences = hasImageReference ? checkVisualReferencesExist(component, dirname(specPath)) : undefined;
+
+  return { emission, result, expressibility, gate: gateResult, tokensResolve, lockStaleness, visualReferences };
 }

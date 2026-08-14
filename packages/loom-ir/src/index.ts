@@ -28,6 +28,7 @@ export type {
   TokenRefNode,
   LayoutIntentNode,
   VisualConformanceNode,
+  VisualReference,
   StyleNode,
   UsesNode,
   EachSlotContent,

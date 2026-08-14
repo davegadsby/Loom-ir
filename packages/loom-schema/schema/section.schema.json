@@ -274,7 +274,29 @@
       "required": ["kind", "reference"],
       "properties": {
         "kind": { "const": "visual-conformance" },
-        "reference": { "type": "string", "description": "Path/URL to a reference frame or visual-regression baseline id." },
+        "reference": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "path"],
+              "properties": {
+                "kind": { "const": "image" },
+                "path": { "type": "string", "description": "Path to a reference image, relative to this spec file's own directory." }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "frameId"],
+              "properties": {
+                "kind": { "const": "figma-frame" },
+                "frameId": { "type": "string" }
+              }
+            }
+          ],
+          "description": "The design source of truth this component's rendered output should visually match. Kept separate from whichever tool later validates against it (Chromatic, Percy, a custom pixel-diff)."
+        },
         "verify": { "type": "string", "enum": ["unit", "interaction", "a11y", "visual"] }
       }
     },

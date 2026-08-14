@@ -14,6 +14,7 @@
     { "path": "packages/loom-emit-briefing" },
     { "path": "packages/loom-results" },
     { "path": "packages/loom-validate" },
+    { "path": "packages/loom-visual-diff" },
     { "path": "packages/loom-cli" }
   ]
 }
