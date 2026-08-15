@@ -1,0 +1,17 @@
+{
+  "name": "loom-angular-components",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./dist/fesm2022/loom-angular-components.mjs",
+  "module": "./dist/fesm2022/loom-angular-components.mjs",
+  "types": "./dist/index.d.ts",
+  "peerDependencies": {
+    "@angular/common": "^18.2.0",
+    "@angular/core": "^18.2.0"
+  },
+  "dependencies": {
+    "loom-expr": "workspace:*",
+    "tslib": "^2.6.0"
+  }
+}

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/angular";
-import { CardComponent } from "../generated/angular/Card.component";
+import { CardComponent } from "loom-angular-components";
 
 /**
  * Hand-authored, not generated — static/display-only for this first pass
@@ -49,5 +49,6 @@ export const Default: Story = {
         </div>
       </loom-card>
     `,
+    moduleMetadata: { imports: [CardComponent] },
   }),
 };

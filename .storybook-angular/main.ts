@@ -12,44 +12,45 @@ import type { StorybookConfig } from "@storybook/angular";
  * through one of its own Angular CLI Architect builders
  * (`@storybook/angular:start-storybook`/`build-storybook`), confirmed
  * directly from its shipped source after the plain-CLI path failed with
- * `AngularLegacyBuildOptionsError`. `../angular.json` registers a project
- * purely to host those two builders (no real Angular app — `browserTarget`
- * is optional and unset) — this file is still where the actual Storybook
- * config (stories, webpack customization) lives; `ng run
- * loom-storybook:storybook`/`:build-storybook` (the `storybook:angular`/
- * `storybook:angular:build` root scripts) is what actually invokes it.
- * `experimentalZoneless` (avoiding a `zone.js` dependency entirely) lives in
- * `angular.json`'s own builder options, not here — it's a builder-schema
- * option, not a `main.ts` framework option, in this codepath.
+ * `AngularLegacyBuildOptionsError`. `../angular.json` registers the project
+ * hosting those two builders, plus a `build` target for a minimal bootstrap
+ * app (`.storybook-angular/bootstrap/`, never actually mounted at runtime)
+ * — needed only because `start-storybook`'s own schema, unlike
+ * `build-storybook`'s, has no default for `browserTarget` and throws
+ * without one (see `start-schema.json` vs `build-schema.json` in
+ * `@storybook/angular`'s package root). `experimentalZoneless` (avoiding a
+ * `zone.js` dependency entirely) lives in `angular.json`'s own builder
+ * options, not here — it's a builder-schema option, not a `main.ts`
+ * framework option, in this codepath.
  *
- * KNOWN LIMITATION — build/typecheck only, does not yet visually render:
- * every generated `.component.ts` file compiles to a genuinely empty
- * webpack module under `@ngtools/webpack` in this configuration; no build
- * error or TypeScript diagnostic surfaces it. Confirmed by inspecting
- * compiled bundle text directly (the component class body is entirely
- * absent, not just minified/hidden — checked in both the production build
- * AND the un-minified dev-server bundle, ruling out tree-shaking) and by
- * inspecting the live DOM (component selectors render as empty,
- * unrecognized custom elements). Three independent configurations were
- * tried and produced the identical empty result: (1) a headless
- * `angular.json` project with no `browserTarget` at all, (2) a real
- * bootstrapped Angular app wired in as `browserTarget` for
- * `build-storybook`, and (3) the same real bootstrapped app wired into the
- * dev server (`ng run loom-storybook:storybook`) — the `build` architect
- * target and `.storybook-angular/bootstrap/` files here exist for that last
- * reason (`start-storybook`'s own schema, unlike `build-storybook`'s, has
- * no default for `browserTarget` and throws without one — see
- * `start-schema.json` vs `build-schema.json` in `@storybook/angular`'s
- * package root). This build still has real value — it typechecks and
- * bundles the real generated output, and already caught one genuine
- * compiler bug (`loom-emit-angular` wasn't importing `NgFor` for `*ngFor`
- * usage) that nothing else in this repo could catch, since `tsc` has no
- * notion of Angular template-level directive imports. Actually viewing
- * rendered Angular components remains open follow-up work — the next
- * untested angle would be a minimal, from-scratch reproduction filed as a
- * `storybookjs/storybook` issue, since nothing in its existing issue
- * tracker documents this exact symptom.
- * See `README.md`'s Storybook section for the user-facing version of this.
+ * RESOLVED — component rendering: for a long time every generated
+ * `.component.ts` file compiled to a genuinely empty webpack module when
+ * Storybook's own webpack build tried to AOT/JIT-compile the raw source
+ * directly via `@ngtools/webpack` (confirmed emptiness across a headless
+ * `angular.json` project, a real bootstrapped `browserTarget` app, and the
+ * dev server — ruling out tree-shaking and reachability theories in turn).
+ * The actual fix: stories now import components from
+ * `packages/loom-angular-components/`, a real Angular library built once
+ * via `ng-packagr` (`pnpm build:angular-lib`, wired as a prerequisite step
+ * in the `storybook:angular`/`storybook:angular:build` scripts) — the same
+ * pattern every real Angular component library uses. Storybook then
+ * imports its pre-compiled output as an ordinary dependency; no
+ * Angular-specific transform happens inside Storybook's own webpack build
+ * anymore, sidestepping `@ngtools/webpack`'s broken per-file emission
+ * entirely. `examples/generated/angular/` and
+ * `examples/material/generated/angular/` stay the real, drift-tested
+ * generator output — the library's `examples/angular-components.public-api.ts`
+ * is a thin re-export barrel, not a copy.
+ *
+ * KNOWN LIMITATION — components render structurally correct (real DOM,
+ * real `*ngFor`/selection state, real `_nghost`/`_ngcontent` Ivy markers)
+ * but currently unstyled: `preview.ts`'s global `tokens.css` import never
+ * makes it into the built page (no CSS file or `<link>` in
+ * `storybook-static/iframe.html`), so components' own `styleUrls` CSS —
+ * confirmed correctly compiled and injected as real `<style>` tags — falls
+ * back on undefined custom properties (`var(--color-surface-default)`
+ * resolves empty). A separate, smaller gap from the rendering fix above;
+ * open follow-up work.
  */
 const config: StorybookConfig = {
   stories: [
@@ -63,18 +64,17 @@ const config: StorybookConfig = {
     options: {},
   },
   webpackFinal: async (webpackConfig) => {
-    // Mirrors .storybook/main.ts's own viteFinal base-path hook — a GitHub
-    // Pages project site is served under /<repo>/, and this Storybook is
-    // nested one level further, under /<repo>/angular/ (see
-    // .github/workflows/deploy-storybook.yml). Gated on the same env var so
-    // local dev (storybook:angular) and any local build without it are
-    // unaffected.
-    if (process.env.STORYBOOK_BASE_PATH) {
-      webpackConfig.output = {
-        ...webpackConfig.output,
-        publicPath: `${process.env.STORYBOOK_BASE_PATH}angular/`,
-      };
-    }
+    // Unlike .storybook/main.ts's viteFinal (Vite needs an explicit `base`
+    // for its absolute asset URLs), this builder's iframe.html loads chunks
+    // via plain relative `import './foo.js'` specifiers — confirmed by
+    // inspecting the built output directly. Setting `output.publicPath` to
+    // an absolute STORYBOOK_BASE_PATH-derived value breaks this: the
+    // builder statically prefixes each injected import with `./`, so an
+    // already-absolute publicPath produces a broken doubled path
+    // (`.//Loom-ir/angular/Loom-ir/angular/runtime....js`, 404). Natural
+    // relative resolution against the page's own served location already
+    // does the right thing under any nesting depth (root, `/<repo>/angular/`
+    // on Pages, etc.) with no base-path configuration needed at all.
 
     // Two of the Angular CLI preset's own module rules match every .ts file
     // with no exclusion for story files, found via `ng run

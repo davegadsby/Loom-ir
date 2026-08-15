@@ -140,7 +140,7 @@ Every push to `main` rebuilds and republishes this Storybook to GitHub
 Pages via `.github/workflows/deploy-storybook.yml` — that's the site linked
 above.
 
-### Angular Storybook (build-only, for now)
+### Angular Storybook
 
 The generated Angular components have their own Storybook config
 (`.storybook-angular/`), run through `@storybook/angular`'s Angular CLI
@@ -154,20 +154,28 @@ pnpm storybook:angular          # local dev server at localhost:6007
 pnpm storybook:angular:build    # static build → storybook-static/
 ```
 
-It typechecks and bundles the real generated Angular output — and already
-caught one genuine compiler bug this way (a missing `NgFor` standalone
-import for `*ngFor` usage that `tsc` alone couldn't have caught) — but does
-**not yet visually render**: `@ngtools/webpack` compiles the generated
-`.component.ts` files to empty modules in this configuration for reasons not
-yet root-caused. Three configurations were tried and all produced the
-identical empty result: a headless `angular.json` project, a real
-bootstrapped app wired in as `browserTarget`, and — to rule out a
-production-build-only tree-shaking bug — the dev server itself, checked
-against its un-minified bundle output. See the comment at the top of
-`.storybook-angular/main.ts` for the full
-investigation). It isn't deployed to GitHub Pages or linked from the
-combined Storybook host for this reason; that's open follow-up work once
-rendering is fixed.
+Stories import from `loom-angular-components` (`packages/loom-angular-components/`),
+a real Angular library built once via `ng-packagr` (`pnpm build:angular-lib`,
+wired as a prerequisite step in both scripts above) that re-exports the
+generated components — the same pattern every real Angular component
+library uses. This is what actually makes rendering work: an earlier
+approach that had Storybook's own webpack build try to AOT/JIT-compile the
+raw `.component.ts` source directly silently produced empty modules for
+reasons never fully root-caused (see the comment at the top of
+`.storybook-angular/main.ts` for that investigation); building through
+`ng-packagr` instead sidesteps it entirely.
+
+Every push to `main` also rebuilds and republishes this Storybook to GitHub
+Pages, nested under `/angular/` in the same deploy as the React one (see
+`.github/workflows/deploy-storybook.yml`), and the React Storybook composes
+it via Storybook's `refs` feature (`.storybook/main.ts`) — open the linked
+site above and look for the "Angular" section in the sidebar.
+
+Components render structurally correct (real DOM, real `*ngFor`/selection
+state, real Ivy view-encapsulation markers) but currently without their own
+CSS applied — `preview.ts`'s global design-token import doesn't reach the
+built page yet, a separate, smaller gap from the rendering fix above. Open
+follow-up work; see `.storybook-angular/main.ts`'s doc comment.
 
 ## Writing a spec
 

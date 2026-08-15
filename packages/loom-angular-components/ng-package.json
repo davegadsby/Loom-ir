@@ -1,0 +1,8 @@
+{
+  "$schema": "../../node_modules/ng-packagr/ng-package.schema.json",
+  "dest": "./dist",
+  "lib": {
+    "entryFile": "../../examples/angular-components.public-api.ts"
+  },
+  "allowedNonPeerDependencies": ["loom-expr"]
+}

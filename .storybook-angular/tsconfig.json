@@ -4,10 +4,13 @@
     "invoked through the ng run loom-storybook:storybook/:build-storybook",
     "architect targets in ../angular.json) — distinct from",
     "../examples/tsconfig.json, which typechecks every generated example for",
-    "both frameworks but drives no build. include lists exactly the files",
-    "this Storybook actually loads: its own main.ts/preview.ts, the",
-    "generated Angular components its stories import, and the stories",
-    "themselves."
+    "both frameworks but drives no build. Story files import components from",
+    "the loom-angular-components package (packages/loom-angular-components/),",
+    "not raw generated source directly — @ngtools/webpack silently compiled",
+    "raw .component.ts source to empty modules in this pipeline (see",
+    "main.ts's doc comment), so include only needs this config's own files",
+    "and the stories themselves; the library's pre-compiled output is",
+    "resolved as an ordinary dependency via node_modules."
   ],
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
@@ -22,11 +25,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": [
-    "**/*.ts",
-    "../examples/generated/angular/**/*.ts",
-    "../examples/angular-stories/**/*.ts",
-    "../examples/material/generated/angular/**/*.ts",
-    "../examples/material/angular-stories/**/*.ts"
-  ]
+  "include": ["**/*.ts", "../examples/angular-stories/**/*.ts", "../examples/material/angular-stories/**/*.ts"]
 }

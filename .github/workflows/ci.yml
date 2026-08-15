@@ -37,6 +37,13 @@ jobs:
       - name: Build
         run: pnpm -r build
 
+      # loom-angular-components isn't a tsc -b project (pnpm -r build skips
+      # it — see its package.json), and examples/tsconfig.json's typecheck
+      # below resolves its types from packages/loom-angular-components/dist/,
+      # so it needs building first.
+      - name: Build Angular library
+        run: pnpm build:angular-lib
+
       # Proves the compiler's committed output is valid code. examplesUpToDate
       # only proves the output text has not changed, never that it compiles.
       - name: Typecheck generated examples

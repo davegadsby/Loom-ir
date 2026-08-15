@@ -1,0 +1,33 @@
+{
+  "//": [
+    "ng-packagr's own compile: turns public-api.ts's re-exports of the real",
+    "generated component files (examples/generated/angular/,",
+    "examples/material/generated/angular/ — the source of truth, not",
+    "duplicated here) into a real, pre-compiled Angular library. Storybook",
+    "then imports that compiled output as an ordinary dependency instead of",
+    "trying to AOT/JIT-compile the raw .component.ts source itself inside",
+    "its own webpack build — the mechanism that silently produced empty",
+    "modules (see .storybook-angular/main.ts). compilationMode: full avoids",
+    "relying on Angular's partial-compilation linker step, since this",
+    "library is never published, only consumed workspace-internally."
+  ],
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false,
+    "experimentalDecorators": true,
+    "composite": false,
+    "types": ["node"]
+  },
+  "angularCompilerOptions": {
+    "compilationMode": "full",
+    "strictTemplates": true,
+    "disableTypeScriptVersionCheck": true
+  },
+  "include": ["../../examples/angular-components.public-api.ts"]
+}

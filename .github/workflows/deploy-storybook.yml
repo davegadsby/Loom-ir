@@ -41,10 +41,23 @@ jobs:
       # matching Vite `base` is wired up in .storybook/main.ts, gated on
       # this env var so the local dev server and storybook:test:ci (served
       # at the root of localhost:6006) are unaffected.
-      - name: Build Storybook
+      - name: Build Storybook (React)
         env:
           STORYBOOK_BASE_PATH: /${{ github.event.repository.name }}/
         run: pnpm storybook:build
+
+      # Angular's Storybook lands in a subdirectory of the same tree, not a
+      # separate deploy — GitHub Pages doesn't support two independent
+      # deploy-pages calls targeting the same site. No base-path env var
+      # needed here (unlike React, above): this builder's iframe.html loads
+      # chunks via plain relative `import './foo.js'` specifiers, which
+      # resolve correctly under any nesting depth without configuration —
+      # see .storybook-angular/main.ts's webpackFinal comment.
+      - name: Build Angular library
+        run: pnpm build:angular-lib
+
+      - name: Build Storybook (Angular)
+        run: npx ng run loom-storybook:build-storybook --output-dir=storybook-static/angular
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

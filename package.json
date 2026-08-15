@@ -18,8 +18,9 @@
     "visual:diff": "tsx examples/visualDiff.ts",
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build",
-    "storybook:angular": "ng run loom-storybook:storybook",
-    "storybook:angular:build": "ng run loom-storybook:build-storybook",
+    "build:angular-lib": "ng build loom-angular-components",
+    "storybook:angular": "ng build loom-angular-components && ng run loom-storybook:storybook",
+    "storybook:angular:build": "ng build loom-angular-components && ng run loom-storybook:build-storybook",
     "storybook:test:ci": "concurrently -k -s first -n \"SB,TEST\" -c \"magenta,blue\" \"pnpm storybook:build --quiet && npx http-server storybook-static --port 6006 --silent\" \"wait-on tcp:6006 && test-storybook\""
   },
   "devDependencies": {
@@ -45,6 +46,7 @@
     "fast-check": "^3.22.0",
     "http-server": "^14.1.1",
     "jsdom": "^25.0.0",
+    "loom-angular-components": "workspace:*",
     "loom-cli": "workspace:*",
     "loom-emit-angular": "workspace:*",
     "loom-emit-react": "workspace:*",
@@ -53,6 +55,7 @@
     "loom-expr": "workspace:*",
     "loom-tokens-import-figma": "workspace:*",
     "loom-visual-diff": "workspace:*",
+    "ng-packagr": "^18.2.0",
     "playwright": "1.56.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

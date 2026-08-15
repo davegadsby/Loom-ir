@@ -3,6 +3,20 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
+    "loom-angular-components": {
+      "projectType": "library",
+      "root": "packages/loom-angular-components",
+      "sourceRoot": "packages/loom-angular-components/src",
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:ng-packagr",
+          "options": {
+            "project": "packages/loom-angular-components/ng-package.json",
+            "tsConfig": "packages/loom-angular-components/tsconfig.lib.json"
+          }
+        }
+      }
+    },
     "loom-storybook": {
       "projectType": "library",
       "root": "",
