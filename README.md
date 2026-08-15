@@ -159,9 +159,12 @@ caught one genuine compiler bug this way (a missing `NgFor` standalone
 import for `*ngFor` usage that `tsc` alone couldn't have caught) — but does
 **not yet visually render**: `@ngtools/webpack` compiles the generated
 `.component.ts` files to empty modules in this configuration for reasons not
-yet root-caused (tried both a headless `angular.json` project and a real
-bootstrapped app as `browserTarget`; neither changed the result — see the
-comment at the top of `.storybook-angular/main.ts` for the full
+yet root-caused. Three configurations were tried and all produced the
+identical empty result: a headless `angular.json` project, a real
+bootstrapped app wired in as `browserTarget`, and — to rule out a
+production-build-only tree-shaking bug — the dev server itself, checked
+against its un-minified bundle output. See the comment at the top of
+`.storybook-angular/main.ts` for the full
 investigation). It isn't deployed to GitHub Pages or linked from the
 combined Storybook host for this reason; that's open follow-up work once
 rendering is fixed.

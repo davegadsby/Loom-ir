@@ -8,11 +8,24 @@
       "root": "",
       "sourceRoot": ".",
       "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:browser",
+          "options": {
+            "outputPath": "dist/loom-storybook-bootstrap",
+            "index": ".storybook-angular/bootstrap/index.html",
+            "main": ".storybook-angular/bootstrap/main.ts",
+            "tsConfig": ".storybook-angular/tsconfig.json",
+            "polyfills": [],
+            "assets": [],
+            "styles": [],
+            "scripts": []
+          }
+        },
         "storybook": {
           "builder": "@storybook/angular:start-storybook",
           "options": {
             "configDir": ".storybook-angular",
-            "tsConfig": ".storybook-angular/tsconfig.json",
+            "browserTarget": "loom-storybook:build",
             "port": 6007,
             "experimentalZoneless": true,
             "compodoc": false

@@ -23,19 +23,32 @@ import type { StorybookConfig } from "@storybook/angular";
  * option, not a `main.ts` framework option, in this codepath.
  *
  * KNOWN LIMITATION — build/typecheck only, does not yet visually render:
- * every generated `.component.ts` file (with or without a real
- * `browserTarget`/bootstrapped app registered in `angular.json` — both were
- * tried) compiles to a genuinely empty webpack module under
- * `@ngtools/webpack` in this configuration; no build error or TypeScript
- * diagnostic surfaces it. Confirmed by inspecting compiled bundle text
- * directly (the component class body is entirely absent, not just
- * minified/hidden) and by inspecting the live DOM (component selectors
- * render as empty, unrecognized custom elements). This build still has real
- * value — it typechecks and bundles the real generated output, and already
- * caught one genuine compiler bug (`loom-emit-angular` wasn't importing
- * `NgFor` for `*ngFor` usage) that nothing else in this repo could catch,
- * since `tsc` has no notion of Angular template-level directive imports.
- * Actually viewing rendered Angular components remains open follow-up work.
+ * every generated `.component.ts` file compiles to a genuinely empty
+ * webpack module under `@ngtools/webpack` in this configuration; no build
+ * error or TypeScript diagnostic surfaces it. Confirmed by inspecting
+ * compiled bundle text directly (the component class body is entirely
+ * absent, not just minified/hidden — checked in both the production build
+ * AND the un-minified dev-server bundle, ruling out tree-shaking) and by
+ * inspecting the live DOM (component selectors render as empty,
+ * unrecognized custom elements). Three independent configurations were
+ * tried and produced the identical empty result: (1) a headless
+ * `angular.json` project with no `browserTarget` at all, (2) a real
+ * bootstrapped Angular app wired in as `browserTarget` for
+ * `build-storybook`, and (3) the same real bootstrapped app wired into the
+ * dev server (`ng run loom-storybook:storybook`) — the `build` architect
+ * target and `.storybook-angular/bootstrap/` files here exist for that last
+ * reason (`start-storybook`'s own schema, unlike `build-storybook`'s, has
+ * no default for `browserTarget` and throws without one — see
+ * `start-schema.json` vs `build-schema.json` in `@storybook/angular`'s
+ * package root). This build still has real value — it typechecks and
+ * bundles the real generated output, and already caught one genuine
+ * compiler bug (`loom-emit-angular` wasn't importing `NgFor` for `*ngFor`
+ * usage) that nothing else in this repo could catch, since `tsc` has no
+ * notion of Angular template-level directive imports. Actually viewing
+ * rendered Angular components remains open follow-up work — the next
+ * untested angle would be a minimal, from-scratch reproduction filed as a
+ * `storybookjs/storybook` issue, since nothing in its existing issue
+ * tracker documents this exact symptom.
  * See `README.md`'s Storybook section for the user-facing version of this.
  */
 const config: StorybookConfig = {
