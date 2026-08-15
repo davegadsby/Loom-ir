@@ -42,6 +42,12 @@ jobs:
       - name: Typecheck generated examples
         run: pnpm typecheck:examples
 
+      # Build-only, not a render check (see README.md's Angular Storybook
+      # section) — still catches real Angular-specific compiler regressions
+      # tsc alone can't (e.g. a missing standalone-component template import).
+      - name: Angular Storybook build
+        run: pnpm storybook:angular:build
+
       - name: Test
         run: pnpm test
 

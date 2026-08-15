@@ -1,0 +1,32 @@
+{
+  "//": [
+    "Drives @storybook/angular's real AOT compilation (via @ngtools/webpack,",
+    "invoked through the ng run loom-storybook:storybook/:build-storybook",
+    "architect targets in ../angular.json) — distinct from",
+    "../examples/tsconfig.json, which typechecks every generated example for",
+    "both frameworks but drives no build. include lists exactly the files",
+    "this Storybook actually loads: its own main.ts/preview.ts, the",
+    "generated Angular components its stories import, and the stories",
+    "themselves."
+  ],
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "experimentalDecorators": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "**/*.ts",
+    "../examples/generated/angular/**/*.ts",
+    "../examples/angular-stories/**/*.ts",
+    "../examples/material/generated/angular/**/*.ts",
+    "../examples/material/angular-stories/**/*.ts"
+  ]
+}

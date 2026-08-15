@@ -226,6 +226,12 @@ describe("emitAngular — each (iteration)", () => {
     expect(file!.contents).toContain("return task.label;");
     expect(file!.contents).not.toContain("loom-expr");
   });
+
+  it("imports NgFor from @angular/common and lists it in the standalone imports array — *ngFor is a structural directive a standalone component's template may only use if it's declared there", () => {
+    const [file] = emitAngular(makeEachFixture());
+    expect(file!.contents).toContain('import { NgFor } from "@angular/common";');
+    expect(file!.contents).toContain("imports: [ListComponent, ListItemComponent, NgFor]");
+  });
 });
 
 describe("emitAngular — selection (shared mutual-exclusive state across each siblings)", () => {

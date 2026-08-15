@@ -31,9 +31,11 @@
     "generated/angular",
     "tests",
     "stories",
+    "angular-stories",
     "types",
     "material/generated/react",
     "material/generated/angular",
-    "material/stories"
+    "material/stories",
+    "material/angular-stories"
   ]
 }
