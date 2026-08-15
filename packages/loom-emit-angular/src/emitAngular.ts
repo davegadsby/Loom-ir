@@ -378,6 +378,18 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   const rootUses = component.composition.find((n) => n.root);
   const referencedComponents = collectReferencedComponents(component.composition);
   const usesNgIf = !!rootUses?.visibleWhen;
+  // `eachTemplateIdents` (below) is non-empty exactly when `printInline`'s
+  // `each` case (§ its own doc comment) will print a `*ngFor` — a standalone
+  // component's template may only use a built-in structural directive if
+  // it's listed in `imports:`, the same real Angular constraint `usesNgIf`
+  // already accounts for via `NgIf`. Missed until now because nothing ever
+  // actually bootstrapped this output (only typechecked as plain
+  // TypeScript, which has no notion of template-level directive imports) —
+  // surfaced by actually rendering `radio-group`'s generated component in a
+  // real Angular Storybook.
+  const eachIdents = eachTemplateIdents(component.composition);
+  const usesNgFor = eachIdents.size > 0;
+  const commonImports = [...(usesNgIf ? ["NgIf"] : []), ...(usesNgFor ? ["NgFor"] : [])];
   const hasFiresWhen = events.some((e) => e.firesWhen);
   const fields = component.declarations.filter((d): d is FieldNode => d.kind === "field");
   const derivedValues = component.declarations.filter((d): d is DerivedNode => d.kind === "derived");
@@ -400,7 +412,7 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
       ? `// Unsupported by this backend: ${unsupported.map((n) => n.id).join(", ")}`
       : undefined,
     `import { ${coreImports.join(", ")} } from "@angular/core";`,
-    usesNgIf ? `import { NgIf } from "@angular/common";` : undefined,
+    commonImports.length > 0 ? `import { ${commonImports.join(", ")} } from "@angular/common";` : undefined,
     hasMachine ? `import { LoomMachine, Transition, Guard } from "loom-expr";` : undefined,
     ...referencedComponents.map((c) => `import { ${pascalCase(c.name)}Component } from "./${pascalCase(c.name)}.component";`),
     ``,
@@ -449,14 +461,13 @@ export function emitAngular(component: ComponentNode): EmittedFile[] {
   // into the same `when` node a nested field-error gets, and `printInline`
   // handles both identically (see its doc comment for why that's safe here
   // but not for React).
-  const eachIdents = eachTemplateIdents(component.composition);
   // `<input>` is a void element — no children, no closing tag. Checkbox declares no
   // slots, so there is nothing to lose by never printing a template body for it.
   const template = isCheckboxPattern
     ? `<${rootTag} ${attrs.join(" ")} />`
     : `<${rootTag} ${attrs.join(" ")}>${rootUses ? printInline(lowerComposition(rootUses, component), eachIdents) : printRenderNodes(lower(component))}</${rootTag}>`;
 
-  const importsArr = [...referencedComponents.map((c) => `${pascalCase(c.name)}Component`), ...(usesNgIf ? ["NgIf"] : [])];
+  const importsArr = [...referencedComponents.map((c) => `${pascalCase(c.name)}Component`), ...commonImports];
 
   lines.push(`@Component({`);
   lines.push(`  selector: ${JSON.stringify(selector)},`);
