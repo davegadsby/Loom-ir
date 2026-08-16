@@ -42,15 +42,19 @@ import type { StorybookConfig } from "@storybook/angular";
  * generator output — the library's `examples/angular-components.public-api.ts`
  * is a thin re-export barrel, not a copy.
  *
- * KNOWN LIMITATION — components render structurally correct (real DOM,
- * real `*ngFor`/selection state, real `_nghost`/`_ngcontent` Ivy markers)
- * but currently unstyled: `preview.ts`'s global `tokens.css` import never
- * makes it into the built page (no CSS file or `<link>` in
- * `storybook-static/iframe.html`), so components' own `styleUrls` CSS —
- * confirmed correctly compiled and injected as real `<style>` tags — falls
- * back on undefined custom properties (`var(--color-surface-default)`
- * resolves empty). A separate, smaller gap from the rendering fix above;
- * open follow-up work.
+ * RESOLVED — global design-token CSS: components' own `styleUrls` CSS
+ * always compiled and injected correctly as real `<style>` tags, but the
+ * custom properties those rules reference (`var(--color-surface-default)`,
+ * etc.) resolved empty, since a plain `import "*.css"` in `preview.ts`
+ * (the pattern `.storybook/preview.ts` uses for React/Vite) has no effect
+ * here — this builder's assembled webpack config only processes a `.css`
+ * file if it carries a `resourceQuery` tag (`?ngGlobalStyle`, added only to
+ * files listed in a builder's own `styles` array; or `?ngResource`, added
+ * by Angular's compiler to component `styleUrls` — why that path already
+ * worked); a bare import falls through to a loader-less catch-all rule and
+ * gets silently dropped. Fixed by registering the design-token stylesheet
+ * via `../angular.json`'s `styles` builder option instead (the real
+ * Angular CLI global-styles mechanism) — see `preview.ts`.
  */
 const config: StorybookConfig = {
   stories: [
