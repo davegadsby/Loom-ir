@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/angular";
-import { CheckboxComponent } from "../generated/angular/Checkbox.component";
+import { CheckboxComponent } from "loom-angular-components";
 
 /**
  * Hand-authored, not generated — static/display-only for this first pass

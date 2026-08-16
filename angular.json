@@ -3,16 +3,43 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
+    "loom-angular-components": {
+      "projectType": "library",
+      "root": "packages/loom-angular-components",
+      "sourceRoot": "packages/loom-angular-components/src",
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:ng-packagr",
+          "options": {
+            "project": "packages/loom-angular-components/ng-package.json",
+            "tsConfig": "packages/loom-angular-components/tsconfig.lib.json"
+          }
+        }
+      }
+    },
     "loom-storybook": {
       "projectType": "library",
       "root": "",
       "sourceRoot": ".",
       "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:browser",
+          "options": {
+            "outputPath": "dist/loom-storybook-bootstrap",
+            "index": ".storybook-angular/bootstrap/index.html",
+            "main": ".storybook-angular/bootstrap/main.ts",
+            "tsConfig": ".storybook-angular/tsconfig.json",
+            "polyfills": [],
+            "assets": [],
+            "styles": [],
+            "scripts": []
+          }
+        },
         "storybook": {
           "builder": "@storybook/angular:start-storybook",
           "options": {
             "configDir": ".storybook-angular",
-            "tsConfig": ".storybook-angular/tsconfig.json",
+            "browserTarget": "loom-storybook:build",
             "port": 6007,
             "experimentalZoneless": true,
             "compodoc": false

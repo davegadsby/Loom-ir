@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/angular";
-import { RadioGroupComponent } from "../generated/angular/RadioGroup.component";
+import { RadioGroupComponent } from "loom-angular-components";
 
 /**
  * Hand-authored, not generated — static/display-only for this first pass
@@ -15,7 +15,11 @@ import { RadioGroupComponent } from "../generated/angular/RadioGroup.component";
 const meta: Meta<RadioGroupComponent> = {
   component: RadioGroupComponent,
   title: "Material/RadioGroup",
-  render: (args) => ({ props: args, template: `<loom-radio-group [options]="options"></loom-radio-group>` }),
+  render: (args) => ({
+    props: args,
+    template: `<loom-radio-group [options]="options"></loom-radio-group>`,
+    moduleMetadata: { imports: [RadioGroupComponent] },
+  }),
   args: {
     options: [
       { value: "compact", label: "Compact" },
