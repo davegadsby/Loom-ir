@@ -171,11 +171,11 @@ Pages, nested under `/angular/` in the same deploy as the React one (see
 it via Storybook's `refs` feature (`.storybook/main.ts`) — open the linked
 site above and look for the "Angular" section in the sidebar.
 
-Components render structurally correct (real DOM, real `*ngFor`/selection
-state, real Ivy view-encapsulation markers) but currently without their own
-CSS applied — `preview.ts`'s global design-token import doesn't reach the
-built page yet, a separate, smaller gap from the rendering fix above. Open
-follow-up work; see `.storybook-angular/main.ts`'s doc comment.
+Components render fully styled — real DOM, real `*ngFor`/selection state,
+real Ivy view-encapsulation markers, and real design-token CSS (registered
+via `angular.json`'s `styles` builder option rather than a plain `import` in
+`preview.ts`, which this builder's webpack config silently drops — see
+`.storybook-angular/main.ts`'s doc comment for why).
 
 ## Writing a spec
 

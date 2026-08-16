@@ -42,7 +42,8 @@
             "browserTarget": "loom-storybook:build",
             "port": 6007,
             "experimentalZoneless": true,
-            "compodoc": false
+            "compodoc": false,
+            "styles": ["examples/generated/styles/tokens.css"]
           }
         },
         "build-storybook": {
@@ -52,7 +53,8 @@
             "tsConfig": ".storybook-angular/tsconfig.json",
             "outputDir": "storybook-static",
             "experimentalZoneless": true,
-            "compodoc": false
+            "compodoc": false,
+            "styles": ["examples/generated/styles/tokens.css"]
           }
         }
       }
